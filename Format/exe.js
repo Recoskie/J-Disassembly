@@ -100,7 +100,7 @@ format = {
 
     //Add the dos header information node.
 
-    var mzHeader = new treeNode("MZ Header",[1,0,mzSize],msDos); hData.add(mzHeader);
+    var mzHeader = new treeNode("MZ Header",[1,0,mzSize,false],msDos); hData.add(mzHeader);
     
     //Add the MS-Dos header.
     
@@ -237,7 +237,7 @@ format = {
         
         types = undefined; this.readSec =
         [
-          this.noReader,this.readDLL,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,
+          this.noReader,this.readDLL,this.readRes,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,
           this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader
         ];
 
@@ -274,7 +274,7 @@ format = {
 
     //Set the computed size of all the headers.
 
-    hData.setArgs([1,0,pe]);
+    hData.setArgs([1,0,pe,false]);
 
     //Reset data model.
 
@@ -482,6 +482,53 @@ format = {
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
+  Read the resource files in the EXE, or DLL. Note named IDs are not added yet to the web version. For now we just call them folder#
+  -------------------------------------------------------------------------------------------------------------------------*/
+
+  rBase: 0, rFile: false, readRes: function(vPos)
+  {
+    dModel.clear(); if(format.rBase == 0) //Initialize the data model only when user wants to read the resource files.
+    {
+      format.rBase = vPos; vPos = -2147483648; format.des[10] = new Descriptor([
+        new dataType("Characteristics", Descriptor.LUInt32),
+        new dataType("Date time stamp", Descriptor.LUInt32),
+        new dataType("Major Version", Descriptor.LUInt16),
+        new dataType("Minor Version", Descriptor.LUInt16),
+        new dataType("Number Of Named Entries", Descriptor.LUInt16),
+        new dataType("Number Of Id Entries", Descriptor.LUInt16),
+        format.rArray = new arrayType("Dir",[
+          new dataType("Name, or ID", Descriptor.LInt32),
+          new dataType("Directory, or File", Descriptor.LInt32)
+        ])
+      ]); format.des[11] = new Descriptor([
+        new dataType("File location", Descriptor.LUInt32),
+        new dataType("File size", Descriptor.LUInt32),
+        new dataType("Code Page", Descriptor.LUInt32),
+        new dataType("Reserved", Descriptor.LUInt32)
+      ]);
+      format.des[10].virtual = format.des[11].virtual = true; format.des[10].setEvent(format, "rDInfo"); format.des[11].setEvent(format, "rFInfo");
+    }
+    format.rFile = vPos < 0; if(format.rFile) { vPos+=2147483648; } vPos += format.rBase; file.onRead(format, "dirData", vPos); file.seekV(vPos); file.readV(16);
+  }, dirData: function(vPos) { file.onRead(format, "scanRes", vPos); if(format.rFile) { file.seekV(vPos+16); file.readV(((file.tempD[12]|(file.tempD[13]<<8))+(file.tempD[14]|(file.tempD[15]<<8)))<<3); }
+  else { file.seekV(vPos); file.readV(16); } }, scanRes: function(vPos)
+  {
+    var n = new treeNode(format.node.innerHTML,1,true); if(format.rFile)
+    {
+      n.add("Directory info.h",[40,vPos,file.tempD.length>>3]); for(var i = 0, e = file.tempD.length - 1, t = null; i < e; i+=8)
+      {
+        var name = file.tempD[i]|(file.tempD[i+1]<<8)|(file.tempD[i+2]<<16)|(file.tempD[i+3]<<24);
+
+        if(name < 0){ name = "Folder"; } //Named folders are not supported yet.
+
+        var t = new treeNode(" " + name + "",[-3,(file.tempD[i+4]|(file.tempD[i+5]<<8)|(file.tempD[i+6]<<16)|(file.tempD[i+7]<<24))]); t.add("dummy"); n.add(t,1);
+      }
+    }
+    else { n.add("File info.h",[44,vPos]); n.add("File data",[1,format.baseAddress+(file.tempD[0]|(file.tempD[1]<<8)|(file.tempD[2]<<16)|(file.tempD[3]<<24)),(file.tempD[4]|(file.tempD[5]<<8)|(file.tempD[6]<<16)|(file.tempD[7]<<24)),true]); }
+    
+    format.node.setNode(n);
+  },
+
+  /*-------------------------------------------------------------------------------------------------------------------------
   Section readers that are not yet implemented.
   -------------------------------------------------------------------------------------------------------------------------*/
 
@@ -526,9 +573,17 @@ format = {
 
     des = cmd>>2; cmd &= 3; if(cmd >= 1)
     {
-      //CMD 1 is select bytes.
+      //CMD 1 is select bytes, or message only.
 
-      if(cmd == 1) { dModel.clear(); file.seek(parseInt(e[1])); ds.setType(15, 0, parseInt(e[2]), false); info.innerHTML = format.msg[des]; }
+      if(cmd == 1)
+      {
+        dModel.clear(); if(e.length > 2)
+        {
+          if(e[3] == "false") { file.seek(parseInt(e[1])); ds.setType(15, 0, parseInt(e[2]), false); }
+          else { file.seekV(parseInt(e[1])); ds.setType(15, 0, parseInt(e[2]), true); }
+        }
+        info.innerHTML = format.msg[des];
+      }
 
       //Begin disassembling ms-dos app. MS dos files are by default 16 bit x86.
 
@@ -562,6 +617,7 @@ format = {
         if(des == 7){ format.dllName.length(parseInt(e[2])); }
         if(des == 8){ format.funcArray.length(parseInt(e[2])); }
         if(des == 9){ format.funcName.length(parseInt(e[2])); }
+        if(des == 10) { format.rArray.length(parseInt(e[2])); }
       }
       
       dModel.setDescriptor(format.des[des]);
@@ -627,6 +683,20 @@ format = {
   {
     if( i < 0 ) { this.r1.length(12); }
   
+    info.innerHTML = format.msg[0];
+  },
+  
+  //Resource directory information.
+
+  rDInfo: function(i)
+  {
+    info.innerHTML = format.msg[0];
+  },
+
+  //Resource directory file information.
+
+  rFInfo: function(i)
+  {
     info.innerHTML = format.msg[0];
   },
 

@@ -485,11 +485,11 @@ format = {
   Read the resource files in the EXE, or DLL. Note named IDs are not added yet to the web version. For now we just call them folder#
   -------------------------------------------------------------------------------------------------------------------------*/
 
-  rBase: 0, rFile: false, readRes: function(vPos)
+  rBase: 0, rDir: false, rTemp:[], readRes: function(vPos, len)
   {
     dModel.clear(); if(format.rBase == 0) //Initialize the data model only when user wants to read the resource files.
     {
-      format.rBase = vPos; vPos = -2147483648; format.des[10] = new Descriptor([
+      format.node.setArgs([0,0,1,vPos,len]); format.rBase = vPos; vPos = -2147483648; format.des[10] = new Descriptor([
         new dataType("Characteristics", Descriptor.LUInt32),
         new dataType("Date time stamp", Descriptor.LUInt32),
         new dataType("Major Version", Descriptor.LUInt16),
@@ -505,28 +505,52 @@ format = {
         new dataType("File size", Descriptor.LUInt32),
         new dataType("Code Page", Descriptor.LUInt32),
         new dataType("Reserved", Descriptor.LUInt32)
+      ]); format.des[12] = new Descriptor([
+        new dataType("Name length", Descriptor.LUInt16),
+        format.rLen=new dataType("Entire Name", Descriptor.LString16)
       ]);
-      format.des[10].virtual = format.des[11].virtual = true; format.des[10].setEvent(format, "rDInfo"); format.des[11].setEvent(format, "rFInfo");
+      format.des[10].virtual = format.des[11].virtual = format.des[12].virtual = true; format.des[10].setEvent(format, "rDInfo"); format.des[11].setEvent(format, "rFInfo"); format.des[12].setEvent(format, "rNInfo");
     }
-    format.rFile = vPos < 0; if(format.rFile) { vPos+=2147483648; } vPos += format.rBase; file.onRead(format, "dirData", vPos); file.seekV(vPos); file.readV(16);
-  }, dirData: function(vPos) { file.onRead(format, "scanRes", vPos); if(format.rFile) { file.seekV(vPos+16); file.readV(((file.tempD[12]|(file.tempD[13]<<8))+(file.tempD[14]|(file.tempD[15]<<8)))<<3); }
+    format.rDir = vPos < 0; if(format.rDir) { vPos+=2147483648; } vPos += format.rBase; file.onRead(format, "dirData", vPos); file.seekV(vPos); file.readV(16);
+  }, dirData: function(vPos) { file.onRead(format, "scanRes", vPos); if(format.rDir) { file.seekV(vPos+16); file.readV(((file.tempD[12]|(file.tempD[13]<<8))+(file.tempD[14]|(file.tempD[15]<<8)))<<3); }
   else { file.seekV(vPos); file.readV(16); } }, scanRes: function(vPos)
   {
-    var n = new treeNode(format.node.innerHTML,1,true); if(format.rFile)
+    //Load in the directory array.
+
+    format.rTemp.loc = vPos; if(format.rDir)
     {
-      n.add("Directory info.h",[40,vPos,file.tempD.length>>3]); for(var i = 0, e = file.tempD.length - 1, t = null; i < e; i+=8)
+      for(var i = 0, e = file.tempD.length - 1; i < e; i+=8)
       {
-        var name = file.tempD[i]|(file.tempD[i+1]<<8)|(file.tempD[i+2]<<16)|(file.tempD[i+3]<<24);
-
-        if(name < 0){ name = "Folder"; } //Named folders are not supported yet.
-
-        var t = new treeNode(" " + name + "",[-3,(file.tempD[i+4]|(file.tempD[i+5]<<8)|(file.tempD[i+6]<<16)|(file.tempD[i+7]<<24))]); t.add("dummy"); n.add(t,1);
+        format.rTemp.push(new Number(file.tempD[i]|(file.tempD[i+1]<<8)|(file.tempD[i+2]<<16)|(file.tempD[i+3]<<24)));
+        format.rTemp.push(file.tempD[i+4]|(file.tempD[i+5]<<8)|(file.tempD[i+6]<<16)|(file.tempD[i+7]<<24));
       }
+      format.rScanDir(0);
     }
-    else { n.add("File info.h",[44,vPos]); n.add("File data",[1,format.baseAddress+(file.tempD[0]|(file.tempD[1]<<8)|(file.tempD[2]<<16)|(file.tempD[3]<<24)),(file.tempD[4]|(file.tempD[5]<<8)|(file.tempD[6]<<16)|(file.tempD[7]<<24)),true]); }
-    
-    format.node.setNode(n);
+
+    //Else it is a location to a file with a size parameter.
+
+    else { var a1 = format.node.getArgs(); a1.splice(0,2); var n = new treeNode(format.node.innerHTML,a1,true); n.add("File info.h",[44,vPos]); n.add("File data",[1,format.baseAddress+(file.tempD[0]|(file.tempD[1]<<8)|(file.tempD[2]<<16)|(file.tempD[3]<<24)),(file.tempD[4]|(file.tempD[5]<<8)|(file.tempD[6]<<16)|(file.tempD[7]<<24)),true]); format.node.setNode(n); format.open(a1); return;  }
   },
+  rScanDir: function(i,name)
+  {
+    //Load in any dir/file names.
+
+    if(name != undefined){ format.rTemp[i].name = name; i+=2; } for(;i<format.rTemp.length;i+=2) { if(format.rTemp[i] < 0){ file.onRead(format, "rGetNameLen", i); file.seekV((format.rTemp[i] + 2147483648)+format.rBase); file.readV(2); return; } else { format.rTemp[i].name = format.rTemp[i] + ""; } }
+    
+    //Create directory nodes.
+    
+    var a1 = format.node.getArgs(), a2 = null; a1.splice(0,2); var n = new treeNode(format.node.innerHTML,a1,true); n.add("Directory info.h",[40,format.rTemp.loc]);
+    
+    for(var i = 0, e = format.rTemp.length, t = null; i < e; i+=2)
+    {
+      a2 = [-3,format.rTemp[i+1]]; if(format.rTemp[i] > 0) { a2.push(1); } else { a2.push(48);a2.push(format.rTemp[i]+2147483648+format.rBase); }
+      
+      t = new treeNode("" + format.rTemp[i].name,a2); t.add(""); n.add(t,1);
+    }
+
+    format.node.setNode(n); format.open(a1); format.rTemp = [];
+  },
+  rGetNameLen: function(i) { file.onRead(format, "rGetName", i); file.seekV((format.rTemp[i] + 2147483650)+format.rBase); file.readV((file.tempD[0]<<1)|(file.tempD[1]<<9)); }, rGetName: function(i) { for(var o = "", t = 0;t<(file.tempD.length-1);o+=String.fromCharCode((file.tempD[t]|(file.tempD[t+1]<<8))),t+=2); format.rScanDir(i,o); },
 
   /*-------------------------------------------------------------------------------------------------------------------------
   Section readers that are not yet implemented.
@@ -563,7 +587,7 @@ format = {
 
   open: function(n)
   {
-    var e = (format.node = n).getArgs(), cmd = parseInt(e[0]); if(e[0] == ""){ return; }
+    var e = n.getArgs ? (format.node = n).getArgs() : n, cmd = parseInt(e[0]);
 
     //Check if negative value which are used to load in sections.
 
@@ -612,12 +636,11 @@ format = {
 
       if(e.length > 2)
       {
-        //DLL variable length strings amd function lists.
+        //DLL variable length strings and function lists.
 
         if(des == 7){ format.dllName.length(parseInt(e[2])); }
         if(des == 8){ format.funcArray.length(parseInt(e[2])); }
         if(des == 9){ format.funcName.length(parseInt(e[2])); }
-        if(des == 10) { format.rArray.length(parseInt(e[2])); }
       }
       
       dModel.setDescriptor(format.des[des]);
@@ -688,8 +711,10 @@ format = {
   
   //Resource directory information.
 
-  rDInfo: function(i)
+  rDInfo: function(i, pos)
   {
+    if( i < 0 ) { format.rArray.length((file.data[pos+12]|(file.data[pos+13]<<8))+(file.data[pos+14]|(file.data[pos+15]<<8))); }
+    
     info.innerHTML = format.msg[0];
   },
 
@@ -697,6 +722,15 @@ format = {
 
   rFInfo: function(i)
   {
+    info.innerHTML = format.msg[0];
+  },
+    
+  //Resource entire name.
+
+  rNInfo: function(i, pos)
+  {
+    if( i < 0 ) { format.rLen.length((file.data[pos]<<1)|(file.data[pos+1]<<9)); }
+    
     info.innerHTML = format.msg[0];
   },
 

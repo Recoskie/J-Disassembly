@@ -237,7 +237,7 @@ format = {
         
         types = undefined; this.readSec =
         [
-          this.noReader,this.readDLL,this.readRes,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,
+          this.readExport,this.readDLL,this.readRes,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,
           this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader
         ];
 
@@ -482,7 +482,7 @@ format = {
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
-  Read the resource files in the EXE, or DLL. Note named IDs are not added yet to the web version. For now we just call them folder#
+  Read the resource files in the EXE, or DLL. Note named IDs are not added yet to the web version.
   -------------------------------------------------------------------------------------------------------------------------*/
 
   rBase: 0, rDir: false, rTemp:[], readRes: function(vPos, len)
@@ -551,6 +551,99 @@ format = {
     format.node.setNode(n); format.open(a1); format.rTemp = [];
   },
   rGetNameLen: function(i) { file.onRead(format, "rGetName", i); file.seekV((format.rTemp[i] + 2147483650)+format.rBase); file.readV((file.tempD[0]<<1)|(file.tempD[1]<<9)); }, rGetName: function(i) { for(var o = "", t = 0;t<(file.tempD.length-1);o+=String.fromCharCode((file.tempD[t]|(file.tempD[t+1]<<8))),t+=2); format.rScanDir(i,o); },
+
+  /*-------------------------------------------------------------------------------------------------------------------------
+  Read the exportable methods and data lists. Allow disassembly of callable methods and driver functions in the windows system.
+  -------------------------------------------------------------------------------------------------------------------------*/
+
+  readExport: function(vPos)
+  {
+    format.des[13] = new Descriptor([
+      new dataType("Characteristics", Descriptor.LUInt32),
+      new dataType("Time Date Stamp", Descriptor.LUInt32),
+      new dataType("Major Version", Descriptor.LUInt16),
+      new dataType("Minor Version", Descriptor.LUIn16),
+      new dataType("Export Name location", Descriptor.LUInt32),
+      new dataType("Base", Descriptor.LUInt32),
+      new dataType("Number Of Functions", Descriptor.LUInt32),
+      new dataType("Number Of Names, and ordinals", Descriptor.LUInt32),
+      new dataType("Address list location", Descriptor.LUInt32),
+      new dataType("Method list location", Descriptor.LUInt32),
+      new dataType("Method order location", Descriptor.LUInt32)
+    ]);
+    format.des[14] = new Descriptor([format.eAList = new arrayType("Address List",[new dataType("Address index list", Descriptor.LInt32)])]);
+    format.des[15] = new Descriptor([format.eNList = new arrayType("Name List",[new dataType("Name location", Descriptor.LInt32)])]);
+    format.des[16] = new Descriptor([format.eOList = new arrayType("Ordinal List",[new dataType("Name Address Index", Descriptor.LInt16)])]);
+    format.des[17] = new Descriptor([format.eStr = new dataType("Export name", Descriptor.String8)]);
+    format.des[18] = new Descriptor([format.eStrName = new dataType("Name", Descriptor.String8)]);
+    format.des[13].virtual = format.des[14].virtual = format.des[15].virtual = format.des[16].virtual = format.des[17].virtual = format.des[18].virtual = true;
+    format.des[13].setEvent(format, "eInfo"); format.des[14].setEvent(format, "eInfo"); format.des[15].setEvent(format, "eInfo");
+    format.des[16].setEvent(format, "eInfo");format.des[17].setEvent(format, "eInfo"); format.des[18].setEvent(format, "eInfo");
+    format.des[13].offset = vPos; file.onRead(format,"eReadInfo");file.seekV(vPos);file.readV(40); }, eReadInfo: function()
+  {
+    format.eNameL = (file.tempD[12]|file.tempD[13]<<8|file.tempD[14]<<16|file.tempD[15]<<24) + format.baseAddress;
+    format.eBase = (file.tempD[16]|file.tempD[17]<<8|file.tempD[18]<<16|file.tempD[19]<<24) - 1;
+    format.eFn = file.tempD[20]|file.tempD[21]<<8|file.tempD[22]<<16|file.tempD[23]<<24;
+    format.eSize = file.tempD[24]|file.tempD[25]<<8|file.tempD[26]<<16|file.tempD[27]<<24;
+    format.addressList = (file.tempD[28]|file.tempD[29]<<8|file.tempD[30]<<16|file.tempD[31]<<24) + format.baseAddress;
+    format.nameList = (file.tempD[32]|file.tempD[33]<<8|file.tempD[34]<<16|file.tempD[35]<<24) + format.baseAddress;
+    format.ordinalList = (file.tempD[36]|file.tempD[37]<<8|file.tempD[38]<<16|file.tempD[39]<<24) + format.baseAddress;
+
+    format.des[14].offset = format.addressList; format.des[15].offset = format.nameList; format.des[16].offset = format.ordinalList; format.des[17].offset = format.eNameL;
+    format.eAList.length(format.eFn);format.eNList.length(format.eSize);format.eOList.length(format.eSize);
+
+    format.callBack=format.eReadName; file.onRead(format, "stringZ"); file.seekV(format.eNameL); file.readV(128);
+  }, eReadName: function(name) { format.eName = name; format.eStr.length(name.length+1); file.onRead(format, "eReadAList"); file.seekV(format.addressList); file.readV((format.eFn<<2)-1); }, eReadAList: function()
+  {
+    format.aList = []; format.mList = []; for(var i=0;i<file.tempD.length;i+=4) { format.mList.push(false); format.aList.push((file.tempD[i]|file.tempD[i+1]<<8|file.tempD[i+2]<<16|file.tempD[i+3]<<24) + format.baseAddress); }
+    file.onRead(format, "eReadNList"); file.seekV(format.nameList); file.readV((format.eSize<<2)-1);
+  }, eReadNList: function()
+  {
+    format.nList = []; for(var i=0;i<file.tempD.length;i+=4) { format.nList.push((file.tempD[i]|file.tempD[i+1]<<8|file.tempD[i+2]<<16|file.tempD[i+3]<<24) + format.baseAddress); }
+    file.onRead(format, "eReadOList"); file.seekV(format.ordinalList); file.readV((format.eSize<<1)-1);
+  }, eReadOList: function()
+  {
+    format.oList = []; for(var i=0, t = 0;i<file.tempD.length;i+=2) { t=file.tempD[i]|file.tempD[i+1]<<8; format.oList.push(t); format.mList[t+format.eBase] = true; }
+    format.eNames = []; format.callBack=format.eLoadNames; file.onRead(format, "stringZ"); file.seekV(format.nList[0]); file.readV(128);
+  }, eLoadNames: function(name)
+  {
+    format.eNames.push(name); if(format.eNames.length < format.nList.length) { file.onRead(format, "stringZ"); file.seekV(format.nList[format.eNames.length]); file.readV(128); return; }
+    
+    //Data is loaded and can be parsed.
+
+    var a = format.node.getArgs(); a[0] = 1; var n = new treeNode(format.node.innerHTML,a,true); n.add("Export info.h",52);
+
+    var t1 = new treeNode(format.eName,68), t2 = null; n.add(t1);
+
+    t1.add("Address list location.h",56); t1.add("Name list location.h",60); t1.add("Order list location.h",64);
+
+    //List all named address indexes first.
+
+    for(var i=0;i<format.eNames.length;i++)
+    {
+      t2 = new treeNode(format.eNames[i]+"() #"+(format.oList[i]+format.eBase),[72,format.nList[i],format.eNames[i].length+1]);
+      t2.add("Goto Location.h",[1,format.aList[format.oList[i]+format.eBase],1,true]); t2.add("Disassemble Location.h",[3,format.aList[format.oList[i]+format.eBase]]); t1.add(t2);
+    }
+
+    //List only the unnamed address indexes after the named ones.
+
+    for(var i=0;i<format.aList.length;i++)
+    {
+      if(!format.mList[i])
+      {
+        t2 = new treeNode("No_Name() #"+i,1);
+        t2.add("Goto Location.h",1); t2.add("Disassemble Location.h",1); t1.add(t2);
+      }
+    }
+    
+    //Clear temporary data after data is parsed.
+
+    format.eNameL = format.eBase = format.eFn = format.eSize = format.addressList = format.nameList = format.ordinalList = format.aList = format.mList = format.nList = format.oList = format.eNames = undefined;
+
+    //Set the parsed data to node.
+    
+    format.node.setNode(n); format.open(a);
+  },
 
   /*-------------------------------------------------------------------------------------------------------------------------
   Section readers that are not yet implemented.
@@ -641,6 +734,7 @@ format = {
         if(des == 7){ format.dllName.length(parseInt(e[2])); }
         if(des == 8){ format.funcArray.length(parseInt(e[2])); }
         if(des == 9){ format.funcName.length(parseInt(e[2])); }
+        if(des == 18){ format.eStrName.length(parseInt(e[2])); }
       }
       
       dModel.setDescriptor(format.des[des]);
@@ -731,6 +825,13 @@ format = {
   {
     if( i < 0 ) { format.rLen.length((file.data[pos]<<1)|(file.data[pos+1]<<9)); }
     
+    info.innerHTML = format.msg[0];
+  },
+
+  //Grouping together the export information for now.
+
+  eInfo: function(i, pos)
+  {
     info.innerHTML = format.msg[0];
   },
 

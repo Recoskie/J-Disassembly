@@ -22,6 +22,10 @@ format = {
 
   funcName: new dataType("Method name", Descriptor.String8),
 
+  //Node being scanned. Important to not accept any new commands till complete or we get stack call range errors.
+
+  scanNode: false,
+
   //Reserved data Fields.
 
   r1: new dataType("Reserved", Descriptor.Other),
@@ -474,7 +478,7 @@ format = {
       n.add(dll);
     }
 
-    format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); } format.fnScan = true;
+    format.scanNode = false; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); } format.fnScan = true;
 
     //Clear temporary data.
 
@@ -548,7 +552,7 @@ format = {
       t = new treeNode("" + format.rTemp[i].name,a2); t.add(""); n.add(t,1);
     }
 
-    format.node.setNode(n); format.open(a1); format.rTemp = [];
+    format.scanNode = false; format.node.setNode(n); format.open(a1); format.rTemp = [];
   },
   rGetNameLen: function(i) { file.onRead(format, "rGetName", i); file.seekV((format.rTemp[i] + 2147483650)+format.rBase); file.readV((file.tempD[0]<<1)|(file.tempD[1]<<9)); }, rGetName: function(i) { for(var o = "", t = 0;t<(file.tempD.length-1);o+=String.fromCharCode((file.tempD[t]|(file.tempD[t+1]<<8))),t+=2); format.rScanDir(i,o); },
 
@@ -642,7 +646,7 @@ format = {
 
     //Set the parsed data to node.
     
-    format.node.setNode(n); format.open(a);
+    format.scanNode = false; format.node.setNode(n); format.open(a);
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
@@ -651,7 +655,7 @@ format = {
 
   noReader: function(vPos, size)
   {
-    dModel.clear(); file.seekV(vPos); ds.setType(15, 0, size, true);
+    format.scanNode =  false; dModel.clear(); file.seekV(vPos); ds.setType(15, 0, size, true);
     
     info.innerHTML = "No reader, for this section yet in the web version.";
   },
@@ -680,11 +684,17 @@ format = {
 
   open: function(n)
   {
+    //If there is a node being scanned it is important that we do not accept any new commands.
+
+    if(format.scanNode){ alert("The node \""+format.node.innerHTML+"\" is still being read and parsed.\r\nAccepting new commands can overload the function call stack space."); return; }
+
+    //No nodes are being read or parsed we then can accept the command.
+
     var e = n.getArgs ? (format.node = n).getArgs() : n, cmd = parseInt(e[0]);
 
     //Check if negative value which are used to load in sections.
 
-    if(cmd < 0) { format.readSec[-(cmd+1)](parseFloat(e[1]),parseInt(e[2])); return; }
+    if(cmd < 0) { format.scanNode = true; format.readSec[-(cmd+1)](parseFloat(e[1]),parseInt(e[2])); return; }
 
     //Check if the argument is a command such as start disassembling code, or select bytes.
 

@@ -533,7 +533,7 @@ format = {
 
     //Else it is a location to a file with a size parameter.
 
-    else { var a1 = format.node.getArgs(); a1.splice(0,2); var n = new treeNode(format.node.innerHTML,a1,true); n.add("File info.h",[44,vPos]); n.add("File data",[1,format.baseAddress+(file.tempD[0]|(file.tempD[1]<<8)|(file.tempD[2]<<16)|(file.tempD[3]<<24)),(file.tempD[4]|(file.tempD[5]<<8)|(file.tempD[6]<<16)|(file.tempD[7]<<24)),true]); format.node.setNode(n); format.open(a1); return;  }
+    else { var a1 = format.node.getArgs(); a1.splice(0,2); var n = new treeNode(format.node.innerHTML,a1,true); n.add("File info.h",[44,vPos]); n.add("File data",[1,format.baseAddress+(file.tempD[0]|(file.tempD[1]<<8)|(file.tempD[2]<<16)|(file.tempD[3]<<24)),(file.tempD[4]|(file.tempD[5]<<8)|(file.tempD[6]<<16)|(file.tempD[7]<<24)),true]); format.scanNode = false; format.node.setNode(n); format.open(a1); return;  }
   },
   rScanDir: function(i,name)
   {

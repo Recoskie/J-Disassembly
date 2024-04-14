@@ -560,7 +560,7 @@ format = {
   Read the exportable methods and data lists. Allow disassembly of callable methods and driver functions in the windows system.
   -------------------------------------------------------------------------------------------------------------------------*/
 
-  readExport: function(vPos)
+  readExport: function(vPos,len)
   {
     format.des[13] = new Descriptor([
       new dataType("Characteristics", Descriptor.LUInt32),
@@ -583,66 +583,74 @@ format = {
     format.des[13].virtual = format.des[14].virtual = format.des[15].virtual = format.des[16].virtual = format.des[17].virtual = format.des[18].virtual = true;
     format.des[13].setEvent(format, "eInfo"); format.des[14].setEvent(format, "eInfo"); format.des[15].setEvent(format, "eInfo");
     format.des[16].setEvent(format, "eInfo");format.des[17].setEvent(format, "eInfo"); format.des[18].setEvent(format, "eInfo");
-    format.des[13].offset = vPos; file.onRead(format,"eReadInfo");file.seekV(vPos);file.readV(40); }, eReadInfo: function()
+    format.des[13].offset = vPos; file.onRead(format,"eParseData",vPos);file.seekV(vPos);file.read(len);
+  },
+  eParseData: function(vPos)
   {
-    format.eNameL = (file.tempD[12]|file.tempD[13]<<8|file.tempD[14]<<16|file.tempD[15]<<24) + format.baseAddress;
-    format.eBase = (file.tempD[16]|file.tempD[17]<<8|file.tempD[18]<<16|file.tempD[19]<<24) - 1;
-    format.eFn = file.tempD[20]|file.tempD[21]<<8|file.tempD[22]<<16|file.tempD[23]<<24;
-    format.eSize = file.tempD[24]|file.tempD[25]<<8|file.tempD[26]<<16|file.tempD[27]<<24;
-    format.addressList = (file.tempD[28]|file.tempD[29]<<8|file.tempD[30]<<16|file.tempD[31]<<24) + format.baseAddress;
-    format.nameList = (file.tempD[32]|file.tempD[33]<<8|file.tempD[34]<<16|file.tempD[35]<<24) + format.baseAddress;
-    format.ordinalList = (file.tempD[36]|file.tempD[37]<<8|file.tempD[38]<<16|file.tempD[39]<<24) + format.baseAddress;
+    format.des[17].offset = (file.tempD[12]|file.tempD[13]<<8|file.tempD[14]<<16|file.tempD[15]<<24) + format.baseAddress; //Export file name location.
+    var eBase = (file.tempD[16]|file.tempD[17]<<8|file.tempD[18]<<16|file.tempD[19]<<24) - 1;
+    var eFn = file.tempD[20]|file.tempD[21]<<8|file.tempD[22]<<16|file.tempD[23]<<24;
+    var eSize = file.tempD[24]|file.tempD[25]<<8|file.tempD[26]<<16|file.tempD[27]<<24;
+    format.des[14].offset = (file.tempD[28]|file.tempD[29]<<8|file.tempD[30]<<16|file.tempD[31]<<24) + format.baseAddress; //Address list.
+    format.des[15].offset = (file.tempD[32]|file.tempD[33]<<8|file.tempD[34]<<16|file.tempD[35]<<24) + format.baseAddress; //Name list.
+    format.des[16].offset = (file.tempD[36]|file.tempD[37]<<8|file.tempD[38]<<16|file.tempD[39]<<24) + format.baseAddress; //Ordinal list.
+    format.eAList.length(eFn);format.eNList.length(eSize);format.eOList.length(eSize);
 
-    format.des[14].offset = format.addressList; format.des[15].offset = format.nameList; format.des[16].offset = format.ordinalList; format.des[17].offset = format.eNameL;
-    format.eAList.length(format.eFn);format.eNList.length(format.eSize);format.eOList.length(format.eSize);
-
-    format.callBack=format.eReadName; file.onRead(format, "stringZ"); file.seekV(format.eNameL); file.readV(128);
-  }, eReadName: function(name) { format.eName = name; format.eStr.length(name.length+1); file.onRead(format, "eReadAList"); file.seekV(format.addressList); file.readV((format.eFn<<2)-1); }, eReadAList: function()
-  {
-    format.aList = []; format.mList = []; for(var i=0;i<file.tempD.length;i+=4) { format.mList.push(false); format.aList.push((file.tempD[i]|file.tempD[i+1]<<8|file.tempD[i+2]<<16|file.tempD[i+3]<<24) + format.baseAddress); }
-    file.onRead(format, "eReadNList"); file.seekV(format.nameList); file.readV((format.eSize<<2)-1);
-  }, eReadNList: function()
-  {
-    format.nList = []; for(var i=0;i<file.tempD.length;i+=4) { format.nList.push((file.tempD[i]|file.tempD[i+1]<<8|file.tempD[i+2]<<16|file.tempD[i+3]<<24) + format.baseAddress); }
-    file.onRead(format, "eReadOList"); file.seekV(format.ordinalList); file.readV((format.eSize<<1)-1);
-  }, eReadOList: function()
-  {
-    format.oList = []; for(var i=0, t = 0;i<file.tempD.length;i+=2) { t=file.tempD[i]|file.tempD[i+1]<<8; format.oList.push(t); format.mList[t+format.eBase] = true; }
-    format.eNames = []; format.callBack=format.eLoadNames; file.onRead(format, "stringZ"); file.seekV(format.nList[0]); file.readV(128);
-  }, eLoadNames: function(name)
-  {
-    format.eNames.push(name); if(format.eNames.length < format.nList.length) { file.onRead(format, "stringZ"); file.seekV(format.nList[format.eNames.length]); file.readV(128); return; }
-    
-    //Data is loaded and can be parsed.
+    //Create export node.
 
     var a = format.node.getArgs(); a[0] = 1; var n = new treeNode(format.node.innerHTML,a,true); n.add("Export info.h",52);
 
-    var t1 = new treeNode(format.eName,68), t2 = null; n.add(t1);
+    //Get the export name.
 
-    t1.add("Address list location.h",56); t1.add("Name list location.h",60); t1.add("Order list location.h",64);
+    var str = "", z = -1, i = format.des[17].offset - vPos, e = 0; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
 
-    //List all named address indexes first.
+    //Add export lists to the export name node.
 
-    for(var i=0;i<format.eNames.length;i++)
+    format.eStr.length(str.length); str=str.substring(0,str.length-1); var t1 = new treeNode(str,68), t2 = null; n.add(t1); t1.add("Address list location.h",56); t1.add("Name list location.h",60); t1.add("Order list location.h",64);
+
+    //Entires that are named are set true in mList so that we can skip them when adding the uname entires.
+
+    var mList = []; for(i = 0;i < eFn;mList[i++] = false);
+
+    //Add all named export entireties.
+
+    var aList = format.des[14].offset - vPos, ordinal = 0, i1 = format.des[15].offset - vPos, i2 = format.des[16].offset - vPos; for(e = i1 + (eSize << 2);i1 < e;i1+=4,i2+=2)
     {
-      t2 = new treeNode(format.eNames[i]+"() #"+(format.oList[i]+format.eBase),[72,format.nList[i],format.eNames[i].length+1]);
-      t2.add("Goto Location.h",[1,format.aList[format.oList[i]+format.eBase],1,true]); t2.add("Disassemble Location.h",[3,format.aList[format.oList[i]+format.eBase]]); t1.add(t2);
+      //Get ordinal and set the address as mapped.
+
+      mList[ordinal = (file.tempD[i2]|file.tempD[i2+1]<<8)+eBase] = true;
+
+      //Get method name.
+
+      str = ""; z = -1; i = file.tempD[i1]|file.tempD[i1+1]<<8|file.tempD[i1+2]<<16|file.tempD[i1+3]<<24; i = (i + format.baseAddress) - vPos; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
+
+      //Parse export name data into node.
+
+      t2 = new treeNode(str+"() #"+ordinal,[72,(i-str.length)+vPos,str.length]);
+
+      //Get the address location of ordinal in address list.
+      
+      ordinal = aList + (ordinal << 2); ordinal = (file.tempD[ordinal]|file.tempD[ordinal+1]<<8|file.tempD[ordinal+2]<<16|file.tempD[ordinal+3]<<24) + format.baseAddress;
+
+      //Add goto location and disassembly under export method or data.
+      
+      t2.add("Goto Location.h",[1,ordinal,1,true]); t2.add("Disassemble Location.h",[3,ordinal]); t1.add(t2);
     }
 
-    //List only the unnamed address indexes after the named ones.
+    //Add the unnamed entries.
 
-    for(var i=0;i<format.aList.length;i++)
+    i1 = aList; for(i = 0;i < mList.length;i++,i1+=4)
     {
-      if(!format.mList[i])
+      if(!mList[i])
       {
-        t2 = new treeNode("No_Name() #"+i,1);
-        t2.add("Goto Location.h",1); t2.add("Disassemble Location.h",1); t1.add(t2);
+        ordinal = (file.tempD[i1]|file.tempD[i1+1]<<8|file.tempD[i1+2]<<16|file.tempD[i1+3]<<24) + format.baseAddress;
+        t2 = new treeNode("No_Name() #"+i,1); t2.add("Goto Location.h",[1,ordinal,true]); t2.add("Disassemble Location.h",[3,ordinal]); t1.add(t2);
       }
     }
-    
-    //Clear temporary data after data is parsed.
 
-    format.eNameL = format.eBase = format.eFn = format.eSize = format.addressList = format.nameList = format.ordinalList = format.aList = format.mList = format.nList = format.oList = format.eNames = undefined;
+    //Clear byte data.
+
+    file.tempD = [];
 
     //Set the parsed data to node.
     

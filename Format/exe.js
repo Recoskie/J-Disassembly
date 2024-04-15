@@ -22,7 +22,7 @@ format = {
 
   funcName: new dataType("Method name", Descriptor.String8),
 
-  //Node being scanned. Important to not accept any new commands till complete or we get stack call range errors.
+  //Node being scanned. Important to not accept any new commands till complete or we could corrupt the data buffer.
 
   scanNode: false,
 
@@ -104,7 +104,7 @@ format = {
 
     //Add the dos header information node.
 
-    var mzHeader = new treeNode("MZ Header",[1,0,mzSize,false],msDos); hData.add(mzHeader);
+    var mzHeader = new treeNode("MZ Header",[5,0,mzSize,false],msDos); hData.add(mzHeader);
     
     //Add the MS-Dos header.
     
@@ -241,7 +241,7 @@ format = {
         
         types = undefined; this.readSec =
         [
-          this.readExport,this.readDLL,this.readRes,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,
+          this.readExport,this.readDLL,this.readRes,this.noReader,this.noReader,this.readRelocation,this.noReader,this.noReader,
           this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader
         ];
 
@@ -278,7 +278,7 @@ format = {
 
     //Set the computed size of all the headers.
 
-    hData.setArgs([1,0,pe,false]);
+    hData.setArgs([9,0,pe,false]);
 
     //Reset data model.
 
@@ -301,7 +301,7 @@ format = {
   Scan DLL import table.
   -------------------------------------------------------------------------------------------------------------------------*/
 
-  fnList: [], fnPos: [], fnName: [], readDLL: function(vPos, len)
+  fnPos: [], fnName: [], readDLL: function(vPos, len)
   {
     if(len) //Initialize data. Note the len is useless as it only covers part of the import table data so we use the "lengthV" method to give us the full import segment size.
     {
@@ -329,6 +329,10 @@ format = {
 
       format.des[9] = new Descriptor([new dataType("Address list index", Descriptor.LUInt16),format.funcName]);
 
+      //Detailed information of each descriptor.
+
+      format.des[6].setEvent(format, "dArrayInfo");
+
       //Data is in virtual address space.
 
       format.des[6].virtual = format.des[7].virtual = format.des[8].virtual = format.des[9].virtual = true;
@@ -344,7 +348,7 @@ format = {
 
     //Scan The DLL Array.
 
-    var pos1 = 0, pos2 = 0, fn1 = -1, fn2 = -1, nLoc = -1, fnEl = 0, fnElSize = !format.is64bit ? 4 : 8, str = "", z = -1, i = 0, dll = null; while((fn1|fn2) != 0)
+    var pos1 = 0, pos2 = 0, fn1 = -1, fn2 = -1, nLoc = -1, fnEl = 0, fnElSize = !format.is64bit ? 4 : 8, str = "", z = -1, i = 0, dll = null, fnL1 = null, fnL2 = null; while((fn1|fn2) != 0)
     {
       fn1 = (file.tempD[pos1]|file.tempD[pos1+1]<<8|file.tempD[pos1+2]<<16|file.tempD[pos1+3]<<24);
       nLoc = (file.tempD[pos1+12]|file.tempD[pos1+13]<<8|file.tempD[pos1+14]<<16|file.tempD[pos1+15]<<24);
@@ -360,7 +364,7 @@ format = {
 
         //Add function list nodes.
 
-        fn1 += format.baseAddress; fn2 += format.baseAddress; dll.add("Function array 1.h",[32,fn1,format.fnList.length]); dll.add("Function array 2.h",[32,fn2,format.fnList.length]);
+        fn1 += format.baseAddress; fn2 += format.baseAddress; fnL1 = new treeNode("Function array 1.h"); fnL2 = new treeNode("Function array 2.h"); dll.add(fnL1); dll.add(fnL2);
 
         //Read function list1.
 
@@ -385,9 +389,9 @@ format = {
           pos2 += fnElSize;
         }
 
-        //Add function list size to fnList.
+        //Set function list size to function list nodes.
 
-        fnEl += fnElSize; format.fnList.push(!format.is64bit ? fnEl >> 2 : fnEl >> 3);
+        fnEl += fnElSize; fnEl = !format.is64bit ? fnEl >> 2 : fnEl >> 3; fnL1.setArgs([32,fn1,fnEl]); fnL2.setArgs([32,fn2,fnEl]);
       }
 
       pos1+=20;
@@ -406,7 +410,7 @@ format = {
   {
     dModel.clear(); if(format.rBase == 0) //Initialize the data model only when user wants to read the resource files.
     {
-      format.node.setArgs([0,0,1,vPos,len]); format.rBase = vPos; vPos = -2147483648; format.des[10] = new Descriptor([
+      format.node.setArgs([0,0,17,vPos,len]); format.rBase = vPos; vPos = -2147483648; format.des[10] = new Descriptor([
         new dataType("Characteristics", Descriptor.LUInt32),
         new dataType("Date time stamp", Descriptor.LUInt32),
         new dataType("Major Version", Descriptor.LUInt16),
@@ -514,7 +518,7 @@ format = {
 
     //Create export node.
 
-    var a = format.node.getArgs(); a[0] = 1; var n = new treeNode(format.node.innerHTML,a,true); n.add("Export info.h",52);
+    var a = format.node.getArgs(); a[0] = 13; var n = new treeNode(format.node.innerHTML,a,true); n.add("Export info.h",52);
 
     //Get the export name.
 
@@ -570,6 +574,24 @@ format = {
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
+  Relocations do not need to be read or applied because everything is mapped to the proper address alignments.
+  -------------------------------------------------------------------------------------------------------------------------*/
+
+  readRelocation: function(vPos,size)
+  {
+    format.scanNode =  false; dModel.clear(); file.seekV(vPos); ds.setType(15, 0, size, true);
+    
+    info.innerHTML = "<html>Relocations are used if the program is not loaded at it's preferred base Address set in the op header.<br /><br />" +
+    "The difference is added to locations defined in the address list in this relocation section.<br /><br />" +
+    "Relocations are not needed, for this disassembler as the program is always mapped at it's preferred base address.<br /><br />" +
+    "A reader can be designed for the relocation section, but is not really necessary.<br /><br /><br />" +
+    "Relocations are common in 16Bit, or 32Bit x86. However, 64bit x86 machine code uses relative addresses.<br /><br />" +
+    "Relative addresses are added to the current instruction position in the binary.<br /><br />" +
+    "Allowing the binary to be placed anywhere in memory without having to change the address locations.<br /><br />" +
+    "It is very rare for there to be relocations, if it is a 64bit x86 binary.</html>";
+  },
+
+  /*-------------------------------------------------------------------------------------------------------------------------
   Section readers that are not yet implemented.
   -------------------------------------------------------------------------------------------------------------------------*/
 
@@ -577,7 +599,7 @@ format = {
   {
     format.scanNode =  false; dModel.clear(); file.seekV(vPos); ds.setType(15, 0, size, true);
     
-    info.innerHTML = "No reader, for this section yet in the web version.";
+    info.innerHTML = "No reader, for this section.";
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
@@ -606,7 +628,7 @@ format = {
   {
     //If there is a node being scanned it is important that we do not accept any new commands.
 
-    if(format.scanNode){ alert("The node \""+format.node.innerHTML+"\" is still being read and parsed.\r\nAccepting new commands can overload the function call stack space."); return; }
+    if(format.scanNode){ alert("The node \""+format.node.innerHTML+"\" is still being read and parsed.\r\nAccepting new commands can corrupt the data buffer."); return; }
 
     //No nodes are being read or parsed we then can accept the command.
 
@@ -659,10 +681,10 @@ format = {
 
       if(e.length > 2)
       {
-        //DLL variable length strings and function lists.
+        //Strings that have no encoded length and are zero byte terminated,
 
         if(des == 7){ format.dllName.length(parseInt(e[2])); }
-        if(des == 8){ format.funcArray.length(format.fnList[parseInt(e[2])]); }
+        if(des == 8){ format.funcArray.length(parseInt(e[2])); }
         if(des == 9){ format.funcName.length(parseInt(e[2])); }
         if(des == 18){ format.eStrName.length(parseInt(e[2])); }
       }
@@ -677,7 +699,29 @@ format = {
 
   //Message output for byte selection command.
 
-  msg: ["Detailed information is not added yet to the Microsoft plugin on the web version."],
+  msg: [
+    //No information yet for sections, or data in development.
+    "No information for this data or section yet.",
+    //DOS header.
+    "<html>This is the original DOS header. Which must be at the start of all windows binary files.<br /><br />Today the reserved bytes are used to locate to the new Portable executable header format.<br /><br />" +
+    "However, on DOS this header still loads as the reserved bytes that locate to the PE header do nothing in DOS.<br /><br />Thus the small 16 bit binary at the end will run. " +
+    "Which normally contains a small 16 bit code that prints the message that this program can not be run in DOS mode.<br /><br />Though it can be a full-fledged DOS version of the program.</html>",
+    //Microsoft headers.
+    "<html>The headers setup the Microsoft binary virtual space.<br /><br />Otherwise The import table can not be located.<br /><br />" +
+    "Export Table can not be located.<br /><br />" +
+    "Files that are included in the binary. Called Resource Files. Also can not be located.<br /><br />" +
+    "Nether can the machine code Start position be located.</html>",
+    //Export
+    "<html>Once the headers are read, then the program is setup in virtual space.<br /><br />" +
+    "The Export section is a list of names that locate to a machine code in RAM.<br /><br />" +
+    "Methods can be imported by name, or by number they are in the export Address list.<br /><br />" +
+    "A import table specifies which files to load to memory. If not already loaded.<br /><br />" +
+    "The method list in the import table is replaced with the export locations in RAM from the other file.<br /><br />" +
+    "This allows the other binary to directly run methods by using the import location as a relative address.</html>",
+    //Resource.
+    "<html>Files that can be read within the application, or DLL. Such as pictures, images, audio files.<br /><br />The first Icon that is read is the programs ICon image.<br /><br />" +
+    "Each address location is added to the start of the resource section.</html>"
+  ],
 
   //MZ header information.
 
@@ -730,6 +774,22 @@ format = {
   {
     if( i < 0 ) { this.r1.length(12); }
   
+    info.innerHTML = format.msg[0];
+  },
+
+  //DLL import array info.
+
+  dArrayInfo: function(i)
+  {
+    if( i < 0 )
+    {
+      info.innerHTML = "<html>Methods that are imported from other files using the export table section.<br /><br />" +
+      "Each import file is loaded to RAM memory. Each import has two method lists.<br /><br />" +
+      "The first list is wrote over in RAM with the location to each export method location.<br /><br />" +
+      "This allows the binary to directly run methods without rewriting, or changing machine code.<br /><br />" +
+      "It is easy to map when a method call is done in machine code.</html>"; return;
+    }
+
     info.innerHTML = format.msg[0];
   },
   

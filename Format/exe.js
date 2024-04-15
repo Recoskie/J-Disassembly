@@ -301,192 +301,105 @@ format = {
   Scan DLL import table.
   -------------------------------------------------------------------------------------------------------------------------*/
 
-  readDLL: function(vPos, size)
+  fnList: [], fnPos: [], fnName: [], readDLL: function(vPos, len)
   {
-    //DLL import table array.
-
-    format.vPos = vPos; format.des[6] = new Descriptor([format.dArray = new arrayType("Array Element ",[
-      new dataType("DLL Array Functions Location 1", Descriptor.LUInt32),
-      new dataType("Time Date Stamp", Descriptor.LUInt32),
-      new dataType("Forward Chain", Descriptor.LUInt32),
-      new dataType("DLL Name Location", Descriptor.LUInt32),
-      new dataType("DLL Array Functions Location 2", Descriptor.LUInt32),
-    ])]); format.des[6].offset = vPos;
-
-    //DLL Name.
-
-    format.des[7] = new Descriptor([format.dllName]);
-
-    //DLL function array.
-
-    format.des[8] = new Descriptor([format.funcArray = new arrayType("Array Element ",[
-      new dataType("Import Name Location, or Index", format.is64bit ? Descriptor.LUInt64 : Descriptor.LUInt32),
-    ])]);
-
-    //DLL method name.
-
-    format.des[9] = new Descriptor([new dataType("Address list index", Descriptor.LUInt16),format.funcName]);
-
-    //Data is in virtual address space.
-
-    format.des[6].virtual = format.des[7].virtual = format.des[8].virtual = format.des[9].virtual = true;
-
-    //Temporary data statures used for loading the dll import data.
-
-    format.dllEl = function(n,f1,f2){this.nLoc=n;this.name="";this.f1=f1;this.f2=f2;this.fn1=[""];this.fn2=[""];this.fName=[];};
-    format.dllArray = [new format.dllEl(0,0,0)];format.dllArray[0].fn1=format.dllArray[0].fn2="";format.curEl = 0;format.curFn = 0;
-
-    //Begin reading dll array.
-
-    format.callBack=format.scanDLL; file.onRead(format, "scanDLL"); file.seekV(vPos); file.readV(size+20);
-  },
-
-  //Scan the dll array. 
-
-  fnPos:[], fnName:[], fnScan:false, scanDLL: function(name)
-  {
-    //When Dll array end is reached we load the function lists and names.
-
-    var fnCheck = format.dllArray[0].name == "f1"; if(fnCheck || format.dllArray[0].name == "f2")
+    if(len) //Initialize data. Note the len is useless as it only covers part of the import table data so we use the "lengthV" method to give us the full import segment size.
     {
-      var curFn = fnCheck ? format.dllArray[format.curEl].fn1 : format.dllArray[format.curEl].fn2;
-      
-      //The second function list is meant to be the main array that we read. We use the first function list to write the method locations.
+      //DLL import table array.
 
-      if(format.dllArray[0].fn2 == "end")
+      format.des[6] = new Descriptor([format.dArray = new arrayType("Array Element ",[
+        new dataType("DLL Array Functions Location 1", Descriptor.LUInt32),
+        new dataType("Time Date Stamp", Descriptor.LUInt32),
+        new dataType("Forward Chain", Descriptor.LUInt32),
+        new dataType("DLL Name Location", Descriptor.LUInt32),
+        new dataType("DLL Array Functions Location 2", Descriptor.LUInt32)
+      ])]); format.des[6].offset = vPos;
+
+      //DLL Name.
+
+      format.des[7] = new Descriptor([format.dllName]);
+
+      //DLL function array.
+
+      format.des[8] = new Descriptor([format.funcArray = new arrayType("Array Element ",[
+        new dataType("Import Name Location, or Index", format.is64bit ? Descriptor.LUInt64 : Descriptor.LUInt32),
+      ])]);
+
+      //DLL method name.
+
+      format.des[9] = new Descriptor([new dataType("Address list index", Descriptor.LUInt16),format.funcName]);
+
+      //Data is in virtual address space.
+
+      format.des[6].virtual = format.des[7].virtual = format.des[8].virtual = format.des[9].virtual = true;
+
+      //Begin reading dll array. Note we use the remaining length of the virtual address as the dll import len only covers the dll array size.
+
+      file.onRead(format, "readDLL", vPos); file.seekV(vPos); file.read(file.lengthV()); return;
+    }
+
+    //Create root node.
+
+    var n = new treeNode("DLL Import Table",[24],true);
+
+    //Scan The DLL Array.
+
+    var pos1 = 0, pos2 = 0, fn1 = -1, fn2 = -1, nLoc = -1, fnEl = 0, fnElSize = !format.is64bit ? 4 : 8, str = "", z = -1, i = 0, dll = null; while((fn1|fn2) != 0)
+    {
+      fn1 = (file.tempD[pos1]|file.tempD[pos1+1]<<8|file.tempD[pos1+2]<<16|file.tempD[pos1+3]<<24);
+      nLoc = (file.tempD[pos1+12]|file.tempD[pos1+13]<<8|file.tempD[pos1+14]<<16|file.tempD[pos1+15]<<24);
+      fn2 = (file.tempD[pos1+16]|file.tempD[pos1+17]<<8|file.tempD[pos1+18]<<16|file.tempD[pos1+19]<<24);
+
+      if(nLoc != 0)
       {
-        //Set function name and increment function name scan.
+        //Read DLL name.
 
-        if(name) { format.dllArray[format.curEl].fName[format.curFn++]=name; }
+        str = ""; z = -1; i = (nLoc + format.baseAddress) - vPos; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
 
-        //Scan next function name.
+        dll = new treeNode(str.substring(0,str.length-1),[28,nLoc + format.baseAddress, str.length]); n.add(dll);
 
-        if(format.curFn<curFn.length) { file.onRead(format, "stringZ"); file.seekV(curFn[format.curFn]+2); file.readV(128); }
-        else
+        //Add function list nodes.
+
+        fn1 += format.baseAddress; fn2 += format.baseAddress; dll.add("Function array 1.h",[32,fn1,format.fnList.length]); dll.add("Function array 2.h",[32,fn2,format.fnList.length]);
+
+        //Read function list1.
+
+        pos2 = fn1 - vPos; fnEl = 0; while(nLoc != 0)
         {
-          //Next DLL function list.
+          if(!format.is64bit) { nLoc=file.tempD[pos2]|(file.tempD[pos2+1]<<8)|(file.tempD[pos2+2]<<16)|(file.tempD[pos2+3]<<24); }
+          else { nLoc=(file.tempD[pos2]|(file.tempD[pos2+1]<<8)|(file.tempD[pos2+2]<<16))+(file.tempD[pos2+3]*format.s24)+(file.tempD[pos+4]*format.s32)+(file.tempD[pos2+5]*format.s40)+(file.tempD[pos2+6]*format.s48)+(file.tempD[pos2+7]*format.s56); }
 
-          format.curFn=0;format.curEl+=1; if(format.curEl<format.dllArray.length){format.scanDLL();}
-          
-          //Scanning the import table is complete.
-          
-          else { format.dllScanDone(); return; }
-        }
-      }
+          //Get function name
 
-      //Else load the two function lists.
-
-      else
-      {
-        var pos=0,size=!format.is64bit?4:8,loc=-1,end=false;while(!end && pos<(file.tempD.length-size))
-        {
-          if(!format.is64bit) { loc=file.tempD[pos]|(file.tempD[pos+1]<<8)|(file.tempD[pos+2]<<16)|(file.tempD[pos+3]<<24); }
-          else { loc=(file.tempD[pos]|(file.tempD[pos+1]<<8)|(file.tempD[pos+2]<<16))+(file.tempD[pos+3]*format.s24)+(file.tempD[pos+4]*format.s32)+(file.tempD[pos+5]*format.s40)+(file.tempD[pos+6]*format.s48)+(file.tempD[pos+7]*format.s56); }
-          
-          if(!(end=loc==0)){curFn.push(format.baseAddress+loc);pos+=size;}
-        }
-
-        //When the end is reached we move to the next function list.
-
-        if(end)
-        {
-          if(format.curEl<(format.dllArray.length-1))
+          if(nLoc != 0 && nLoc > 0)
           {
-            file.onRead(format,"scanDLL");file.seekV(fnCheck ? format.dllArray[format.curEl+=1].f1 : format.dllArray[format.curEl+=1].f2);file.readV(64);
-          }
-          else
-          {
-            //Switch to the second function list when done.
+            nLoc += format.baseAddress; str = ""; z = -1; i = (nLoc - vPos) + 2; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
 
-            if(fnCheck) { format.dllArray[0].fn1="end";format.dllArray[0].name="f2";file.onRead(format,"scanDLL");file.seekV(format.dllArray[format.curEl=1].f2);file.readV(64); }
+            dll.add(str+"().dll",[36,nLoc, str.length]);
             
-            //Both lists are scanned and we can begin loading the method names.
+            //Function list 2 is used by the machine code section to call a an linked location from an export list.
             
-            else{format.dllArray[0].fn2="end";format.curEl=1;format.scanDLL();}
+            format.fnPos.push(fnEl + fn2); fnEl += fnElSize; format.fnPos.push(fnEl + fn2); format.fnName.push(str);
           }
+
+          pos2 += fnElSize;
         }
 
-        //Else end has not been reached and we need more data.
+        //Add function list size to fnList.
 
-        else { file.onRead(format,"scanDLL");file.seekV(file.tempD.offset+pos);file.readV(64); }
+        fnEl += fnElSize; format.fnList.push(!format.is64bit ? fnEl >> 2 : fnEl >> 3);
       }
+
+      pos1+=20;
     }
 
-    //When Dll array is loaded we can locate the dll names.
+    format.dArray.length(pos1>>4|pos1>>2); //Fast bitwise divide by 20.
 
-    else if(format.dllArray[0].name == "end")
-    {
-      //Set dll name and increment dll name scan.
-
-      if(name) { format.dllArray[format.curEl++].name=name; }
-
-      //Scan next dll name.
-
-      if(format.curEl<format.dllArray.length)
-      {
-        file.onRead(format, "stringZ"); file.seekV(format.dllArray[format.curEl].nLoc); file.readV(128);
-      }
-      else
-      {
-        format.dllArray[0].name="f1"; file.onRead(format,"scanDLL");file.seekV(format.dllArray[format.curEl=1].f1);file.readV(64);
-      }
-    }
-
-    //Else load the dll array.
-
-    else
-    {
-      var n = -1, f1 = 0, f2 = 0, pos = 0, end = false; while(!end && (file.tempD.length-20)>pos)
-      {
-        f1 = file.tempD[pos]|(file.tempD[pos+1]<<8)|(file.tempD[pos+2]<<16)|(file.tempD[pos+3]<<24);
-        n = file.tempD[pos+12]|(file.tempD[pos+13]<<8)|(file.tempD[pos+14]<<16)|(file.tempD[pos+15]<<24);
-        f2 = file.tempD[pos+16]|(file.tempD[pos+17]<<8)|(file.tempD[pos+18]<<16)|(file.tempD[pos+19]<<24);
-        if(!(end=((n|f1|f2)==0))){format.dllArray.push(new format.dllEl(format.baseAddress+n,format.baseAddress+f1,format.baseAddress+f2));pos+=20;}
-      }
-
-      if(end)
-      {
-        format.dllArray[0].name="end";format.curEl=1;format.scanDLL();
-      }
-      else
-      {
-        file.onRead(format,"scanDLL");file.seekV(pos+file.tempD.offset);file.readV(60);
-      }
-    }
-  },
-
-  //Create the tree nodes and setup the function map and clear the temporary data structures.
-
-  dllScanDone: function()
-  {
-    var n = new treeNode("DLL Import Table",[24],true); format.dArray.length(format.dllArray.length);
-
-    var dll=null, fnPos = 0, addrsSize = !format.is64bit ? 4 : 8, fnName = ""; for(var i1=1;i1<format.dllArray.length;i1++)
-    {
-      dll=new treeNode(format.dllArray[i1].name,[28,format.dllArray[i1].nLoc,format.dllArray[i1].name.length+1]);
-
-      dll.add(new treeNode("Function array 1.h",[32,format.dllArray[i1].f1,format.dllArray[i1].fn1.length]));
-      dll.add(new treeNode("Function array 2.h",[32,format.dllArray[i1].f2,format.dllArray[i1].fn2.length]));
-
-      fnPos = format.dllArray[i1].f2;for(var i2=1;i2<format.dllArray[i1].fn2.length;i2++)
-      {
-        fnName=format.dllArray[i1].fName[i2];format.fnPos.push(fnPos);format.fnPos.push(fnPos+=addrsSize);format.fnName.push(fnName);
-
-        dll.add(new treeNode(fnName+"().dll",[36,format.dllArray[i1].fn2[i2],fnName.length+1]));
-      }
-      
-      n.add(dll);
-    }
-
-    format.scanNode = false; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); } format.fnScan = true;
-
-    //Clear temporary data.
-
-    format.dllArray = format.dllEl = format.curEl = format.curFn = undefined;
+    format.scanNode = false; file.tempD = []; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); } format.fnScan = true;
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
-  Read the resource files in the EXE, or DLL. Note named IDs are not added yet to the web version.
+  Read the resource files in the EXE, or DLL.
   -------------------------------------------------------------------------------------------------------------------------*/
 
   rBase: 0, rDir: false, rTemp:[], readRes: function(vPos, len)
@@ -562,31 +475,34 @@ format = {
 
   readExport: function(vPos,len)
   {
-    format.des[13] = new Descriptor([
-      new dataType("Characteristics", Descriptor.LUInt32),
-      new dataType("Time Date Stamp", Descriptor.LUInt32),
-      new dataType("Major Version", Descriptor.LUInt16),
-      new dataType("Minor Version", Descriptor.LUIn16),
-      new dataType("Export Name location", Descriptor.LUInt32),
-      new dataType("Base", Descriptor.LUInt32),
-      new dataType("Number Of Functions", Descriptor.LUInt32),
-      new dataType("Number Of Names, and ordinals", Descriptor.LUInt32),
-      new dataType("Address list location", Descriptor.LUInt32),
-      new dataType("Method list location", Descriptor.LUInt32),
-      new dataType("Method order location", Descriptor.LUInt32)
-    ]);
-    format.des[14] = new Descriptor([format.eAList = new arrayType("Address List",[new dataType("Address index list", Descriptor.LInt32)])]);
-    format.des[15] = new Descriptor([format.eNList = new arrayType("Name List",[new dataType("Name location", Descriptor.LInt32)])]);
-    format.des[16] = new Descriptor([format.eOList = new arrayType("Ordinal List",[new dataType("Name Address Index", Descriptor.LInt16)])]);
-    format.des[17] = new Descriptor([format.eStr = new dataType("Export name", Descriptor.String8)]);
-    format.des[18] = new Descriptor([format.eStrName = new dataType("Name", Descriptor.String8)]);
-    format.des[13].virtual = format.des[14].virtual = format.des[15].virtual = format.des[16].virtual = format.des[17].virtual = format.des[18].virtual = true;
-    format.des[13].setEvent(format, "eInfo"); format.des[14].setEvent(format, "eInfo"); format.des[15].setEvent(format, "eInfo");
-    format.des[16].setEvent(format, "eInfo");format.des[17].setEvent(format, "eInfo"); format.des[18].setEvent(format, "eInfo");
-    format.des[13].offset = vPos; file.onRead(format,"eParseData",vPos);file.seekV(vPos);file.read(len);
-  },
-  eParseData: function(vPos)
-  {
+    if(len) //Initialize data.
+    {
+      format.des[13] = new Descriptor([
+        new dataType("Characteristics", Descriptor.LUInt32),
+        new dataType("Time Date Stamp", Descriptor.LUInt32),
+        new dataType("Major Version", Descriptor.LUInt16),
+        new dataType("Minor Version", Descriptor.LUIn16),
+        new dataType("Export Name location", Descriptor.LUInt32),
+        new dataType("Base", Descriptor.LUInt32),
+        new dataType("Number Of Functions", Descriptor.LUInt32),
+        new dataType("Number Of Names, and ordinals", Descriptor.LUInt32),
+        new dataType("Address list location", Descriptor.LUInt32),
+        new dataType("Method list location", Descriptor.LUInt32),
+        new dataType("Method order location", Descriptor.LUInt32)
+      ]);
+      format.des[14] = new Descriptor([format.eAList = new arrayType("Address List",[new dataType("Address index list", Descriptor.LInt32)])]);
+      format.des[15] = new Descriptor([format.eNList = new arrayType("Name List",[new dataType("Name location", Descriptor.LInt32)])]);
+      format.des[16] = new Descriptor([format.eOList = new arrayType("Ordinal List",[new dataType("Name Address Index", Descriptor.LInt16)])]);
+      format.des[17] = new Descriptor([format.eStr = new dataType("Export name", Descriptor.String8)]);
+      format.des[18] = new Descriptor([format.eStrName = new dataType("Name", Descriptor.String8)]);
+      format.des[13].virtual = format.des[14].virtual = format.des[15].virtual = format.des[16].virtual = format.des[17].virtual = format.des[18].virtual = true;
+      format.des[13].setEvent(format, "eInfo"); format.des[14].setEvent(format, "eInfo"); format.des[15].setEvent(format, "eInfo");
+      format.des[16].setEvent(format, "eInfo");format.des[17].setEvent(format, "eInfo"); format.des[18].setEvent(format, "eInfo");
+      format.des[13].offset = vPos; file.onRead(format,"readExport",vPos);file.seekV(vPos);file.read(len); return;
+    }
+
+    //Parse binary data.
+
     format.des[17].offset = (file.tempD[12]|file.tempD[13]<<8|file.tempD[14]<<16|file.tempD[15]<<24) + format.baseAddress; //Export file name location.
     var eBase = (file.tempD[16]|file.tempD[17]<<8|file.tempD[18]<<16|file.tempD[19]<<24) - 1;
     var eFn = file.tempD[20]|file.tempD[21]<<8|file.tempD[22]<<16|file.tempD[23]<<24;
@@ -648,13 +564,9 @@ format = {
       }
     }
 
-    //Clear byte data.
-
-    file.tempD = [];
-
     //Set the parsed data to node.
     
-    format.scanNode = false; format.node.setNode(n); format.open(a);
+    format.scanNode = false; file.tempD = []; format.node.setNode(n); format.open(a);
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
@@ -750,7 +662,7 @@ format = {
         //DLL variable length strings and function lists.
 
         if(des == 7){ format.dllName.length(parseInt(e[2])); }
-        if(des == 8){ format.funcArray.length(parseInt(e[2])); }
+        if(des == 8){ format.funcArray.length(format.fnList[parseInt(e[2])]); }
         if(des == 9){ format.funcName.length(parseInt(e[2])); }
         if(des == 18){ format.eStrName.length(parseInt(e[2])); }
       }

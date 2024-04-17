@@ -877,7 +877,9 @@ format = {
   "Start of the binaries machine code in virtual space. Plus the \"Base Address\".",
   "The beginning of the machine code section. Plus the \"Base Address\".<br /><br />The start position does not have to be at the very start of the machine code section.",
   "The Data section is a safe spot to put results from operations without writing over program machine code.<br /><br />In code these are called variables.",
-  "Base address is added to all virtual addresses.<br /><br />It is the preferred address to load the mapped sections in RAM from this file.<br /><br />Windows may add to this number to space programs apart in virtual space.",
+  "Base address is added to all virtual addresses.<br /><br />It is the preferred address added to the \"Mapped SECTIONS TO RAM\" from this file.<br /><br />" +
+  "Windows may add to this number to space programs apart in virtual space. Which triggers the relocation table to be read to adjust addresses not defined in the sections or headers, " +
+  "but are defined in the relocation table to ensure the application runs as it should in it's new location.",
   "The alignment (in bytes) of sections when they are loaded into memory. It must be greater than or equal to FileAlignment. The default is the page size for the architecture.",
   "The alignment factor (in bytes) that is used to align the raw data of sections in the binary file.<br /><br />The value should be a power of 2 between 512 and 64 K, inclusive.<br /><br />" +
   "The default is 512. If the SectionAlignment is less than the architecture's page size, then FileAlignment must match SectionAlignment.",
@@ -1079,7 +1081,7 @@ format = {
 
   secArray: function(i)
   {
-    i-=1; if( i < 0 ) { this.r1.length(12); info.innerHTML = "Number of sections to read was defined in the OP header.<br /><br />" +
+    i-=1; if( i < 0 ) { this.r1.length(12); info.innerHTML = "Number of sections to read was defined in the PE header.<br /><br />" +
     "This array tells us where to read the file and where to place a section of the file in RAM memory.<br /><br />" +
     "The \"Data Directory Array\" uses virtual addresses to tell the loader where the various section or data are in the application.<br /><br />" +
     "The virtual addresses" + format.addressInfo; return; }

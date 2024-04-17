@@ -770,6 +770,11 @@ format = {
 
   ver: "Major, and Minor are put together to forum the version number.<br /><br />Example.<br /><br />Major version = 5<br /><br />Minor version = 12<br /><br />Would mean version 5.12V.",
 
+  addressInfo: " are added to the program \"Base Address\". The \"Base Address\" is defined by the OP header.<br /><br />" +
+  "If an application already occupies the \"Base Address\" defined in this application, the loader can add a value to the \"Base Address\" value to move the application elsewhere.<br /><br />" +
+  "The relocation list records the location of instructions that use fixed address locations. The loader adds the added value to binary instructions in the application that use fixed address locations. This is the only time the relocation list is read.<br /><br />" +
+  "Windows uses unique \"Base Address\" values in the op header, which ensures that all system divers and system applications never have to use the relocation list to make booting and running Windows fast.",
+
   //MZ header data elements info.
 
   mzInfo:["The signature must always be 4D 5A = MZ.<br /><br />" + 
@@ -1044,8 +1049,28 @@ format = {
 
   dirArray: function(i)
   {
-    i-=1; if( i < 0 ) { info.innerHTML = "This is the Data directory array section of the OP header. Every element has a different use.<br /><br />The virtual address positions are useless without setting up the mapped sections after the array.<br /><br />" +
-    "The virtual addresses are added to the programs \"Base Address\". The \"Base Address\" is defined by the OP header.<br /><br />Anything that is 0, is not used."; return; }
+    i-=1; if( i < 0 ) { info.innerHTML = "This is the Data directory array section of the OP header. Every element has a different use.<br /><br />" +
+    "<table border=\"1\"><tr><td>Array element 0</td><td>function Export Table</td></tr>" +
+    "<tr><td>Array element 1</td><td>DLL Import Table</td></tr>" +
+    "<tr><td>Array element 2</td><td>Resource Files</td></tr>" +
+    "<tr><td>Array element 3</td><td>Exception Table</td></tr>" +
+    "<tr><td>Array element 4</td><td>Security Level Settings</td></tr>" +
+    "<tr><td>Array element 5</td><td>Relocations</td></tr>" +
+    "<tr><td>Array element 6</td><td>DEBUG TABLE</td></tr>" +
+    "<tr><td>Array element 7</td><td>Description/Architecture</td></tr>" +
+    "<tr><td>Array element 8</td><td>Machine Value</td></tr>" +
+    "<tr><td>Array element 9</td><td>Thread Storage Location</td></tr>" +
+    "<tr><td>Array element 10</td><td>Load System Configuration</td></tr>" +
+    "<tr><td>Array element 11</td><td>Import Table of Functions inside program</td></tr>" +
+    "<tr><td>Array element 12</td><td>Import Address Setup Table</td></tr>" +
+    "<tr><td>Array element 13</td><td>Delayed Import Table</td></tr>" +
+    "<tr><td>Array element 14</td><td>COM Runtime Descriptor</td></tr></table>" +
+    "<br />The data directory array consists of two numbers per array element: a virtual address location and a section size.<br /><br />" +
+    "If the virtual address and size are zero for a given element, then it does not exist in the binary.<br /><br />" +
+    "The array size can be adjusted to bigger than 15 as the op header contains a value for this array's size at the end of the op header.<br /><br />" +
+    "The adjustable size of this array allows us to add more sections in later versions of Windows. The address and size of a section defined in this array is the actual section and its real size.<br /><br />" +
+    "The virtual address positions are useless without setting up the \"Mapped SECTIONS TO RAM\" after the data directory array.<br /><br />" +
+    "The \"Mapped SECTIONS TO RAM\" tells us where to place sections of the file into RAM, which" + format.addressInfo; return; }
   
     info.innerHTML = format.dirInfo[i%3];
   },
@@ -1054,8 +1079,10 @@ format = {
 
   secArray: function(i)
   {
-    i-=1; if( i < 0 ) { this.r1.length(12); info.innerHTML = "Number of sections to read was defined in the OP header.<br /><br />The virtual address positions are useless without setting up the mapped sections.<br /><br />" +
-    "The virtual addresses are added to the programs \"Base Address\". The \"Base Address\" is defined by the OP header."; return; }
+    i-=1; if( i < 0 ) { this.r1.length(12); info.innerHTML = "Number of sections to read was defined in the OP header.<br /><br />" +
+    "This array tells us where to read the file and where to place a section of the file in RAM memory.<br /><br />" +
+    "The \"Data Directory Array\" uses virtual addresses to tell the loader where the various section or data are in the application.<br /><br />" +
+    "The virtual addresses" + format.addressInfo; return; }
   
     info.innerHTML = format.secInfo[i%8];
   },

@@ -297,6 +297,7 @@ format = {
     this.opInfo[16]=this.ver+this.opInfo[16];this.opInfo[17]=this.ver+this.opInfo[17];this.opInfo[18]=this.opInfo[18]+this.res;
     this.opInfo[28]=this.opInfo[28]+this.res;
     this.secInfo[6]=this.res;
+    this.exportInfo[0]=this.exportInfo[0]+this.res;this.exportInfo[2]=this.ver;this.exportInfo[3]=this.ver;
 
     //Show virtual address space.
 
@@ -1007,6 +1008,22 @@ format = {
   "<tr><td>10000000000000000000000000000000</td><td>The section can be written to.</td></tr>" +
   "</table>"],
 
+  //Export section data elements info.
+
+  exportInfo: ["Characteristics are reserved, for future use.<br /><br />",
+  "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
+  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",,,
+  "Location to the export file name.<br /><br />Should be the name of the binary file.",
+  "Base is usually set one = zero.<br /><br />If base is 3, then it is 2 in value.<br /><br />" +
+  "Base is added to the address list. It allows us to skip addresses at the start of the address list.",
+  "Number of address locations in address list.<br /><br />Can be bigger than \"named methods, and order list\"." +
+  "As some methods can only be imported by number they are in the address list.",
+  "Size of named methods, and order list.",
+  "Location to the address list.",
+  "Location to the Method list names.",
+  "The order each method name is in. Method names, and order list are the same in length.<br /><br />The order number tells us which address to use from address list plus Base.<br /><br />" +
+  "On modern compilers the order values should go from first to last in order."],
+
   //MZ header information.
 
   mzHeader: function(i)
@@ -1129,52 +1146,45 @@ format = {
 
   //The main export entire that locates to the address-list and name-list/ordinal-list.
 
-  eInfo: function(i, pos)
+  eInfo: function(i)
   {
-    info.innerHTML = format.msg[0];
+    if( i < 0 )
+    {
+      info.innerHTML = "The export section has a name location that should be the file name.<br /><br />" +
+      "The Export section uses three lists locations.<br /><br />The name list, and order list match in length.<br /><br />" +
+      "The method names are sorted in alphabetical order.<br /><br />The order list is the original order before sorting the names.<br /><br />" +
+      "If method 5 moved to the start of the names list. The first value in the order list then would be 5.<br /><br />" +
+      "This would mean the fifth address in the address list is then the methods location."; return;
+    }
+
+    info.innerHTML = format.exportInfo[i];
   },
 
   //The export address list.
 
-  eAInfo: function(i, pos)
-  {
-    info.innerHTML = format.msg[0];
-  },
+  eAInfo: function() { info.innerHTML = "Location to each method.<br /><br />Method name list might not match the address order.<br /><br />Which is why we have both a name list, and order list."; },
 
   //The export name list.
 
-  eNInfo: function(i, pos)
-  {
-    info.innerHTML = format.msg[0];
-  },
+  eNInfo: function() { info.innerHTML = "The locations to each method name."; },
 
   //The export ordinal list.
 
-  eOInfo: function(i, pos)
-  {
-    info.innerHTML = format.msg[0];
-  },
+  eOInfo: function() { info.innerHTML = "The order each method name is in plus base.<br /><br />Generally goes in order.<br /><br />If addresses are sorted along with the method names in alphabetical order."; },
 
   //The root export name.
 
-  eRInfo: function(i, pos)
-  {
-    info.innerHTML = format.msg[0];
-  },
+  eRInfo: function() { info.innerHTML = "The export name location. The name ends with code 00 hex."; },
 
   //The string name of an importable address in the file.
 
-  eNameInfo: function(i, pos)
-  {
-    info.innerHTML = format.msg[0];
-  },
+  eNameInfo: function() { info.innerHTML = "Location to the export method name, from the method name list. The corresponding order number read from the order list is added to the end of each name.<br /><br />" +
+  "The order number is which address from the address list is the methods location, or data.<br /><br />" +
+  "Methods can be imported by both number in the address list, or by name.<br /><br />In some cases some export methods are not given names as the name list and order list are smaller than the address list."; },
 
   //Used to identify bad file signatures in the case of a corrupted application.
 
-  badSig: function(i)
-  { 
-    info.innerHTML = "A bad signature has been encountered, so the application is corrupted!";
-  },
+  badSig: function() { info.innerHTML = "A bad signature has been encountered, so the application is corrupted!"; },
 
   /*-------------------------------------------------------------------------------------------------------------------------
   Disassembly methods goes bellow this comment. Note it is possible to add am scanner that translates code to C/C++.

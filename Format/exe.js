@@ -298,6 +298,9 @@ format = {
     this.opInfo[28]=this.opInfo[28]+this.res;
     this.secInfo[6]=this.res;
     this.exportInfo[0]=this.exportInfo[0]+this.res;this.exportInfo[2]=this.ver;this.exportInfo[3]=this.ver;
+    this.dllAInfo[1]=this.dListInfo;this.dllAInfo[5]=this.dListInfo;
+    this.rDirInfo[0]=this.rDirInfo[0]+this.res;this.rDirInfo[2]=this.ver;this.rDirInfo[3]=this.ver;
+    this.rFileInfo[3] = this.res;
 
     //Show virtual address space.
 
@@ -346,7 +349,8 @@ format = {
 
       //Detailed information of each descriptor.
 
-      format.des[6].setEvent(format, "dArrayInfo");
+      format.des[6].setEvent(format, "dArrayInfo"); format.des[7].setEvent(format, "dNInfo");
+      format.des[8].setEvent(format, "dFInfo"); format.des[9].setEvent(format, "dFNInfo");
 
       //Data is in virtual address space.
 
@@ -776,6 +780,11 @@ format = {
   "The relocation list records the location of instructions that use fixed address locations. The loader adds the added value to binary instructions in the application that use fixed address locations. This is the only time the relocation list is read.<br /><br />" +
   "Windows uses unique \"Base Address\" values in the op header, which ensures that all system divers and system applications never have to use the relocation list to make booting and running Windows fast.",
 
+  dListInfo: "The location to a list, of which methods to import from the DLL export table.<br /><br />There are two lists That are in different locations, and locate to the same method names.<br /><br />" +
+  "This is used as an error check to ensures the DLL import table is read correctly.<br /><br />" +
+  "The first list locations are replaced with the export method address location from the other binaries export address list.<br /><br />" +
+  "The programs machine code uses the first list locations as the location to call or jump to another binary method or function.",
+
   //MZ header data elements info.
 
   mzInfo:["The signature must always be 4D 5A = MZ.<br /><br />" + 
@@ -1024,6 +1033,41 @@ format = {
   "The order each method name is in. Method names, and order list are the same in length.<br /><br />The order number tells us which address to use from address list plus Base.<br /><br />" +
   "On modern compilers the order values should go from first to last in order."],
 
+  //DLL import array section data elements info.
+
+  dllAInfo: ["Array elements consisting of A DLL name location, and tow List locations.<br /><br />" + 
+  "Two lists are used, for which methods to import from the DLL.<br /><br />The lists should match. If they do not, then the import table is corrupted.<br /><br />" +
+  "The first Element that has no locations, and is all zeros is the end of the DLL import table.",,
+  "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
+  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",
+  "Forward Chain is a list of methods that must be loaded from the DLL file before the import methods may be usable.<br /><br />" +
+  "This is only if the method we want to use depends on other methods. This is all zeros if not used.",
+  "The location of the DLL name to start importing methods from it's export table."],
+
+  //Resource directory section elements info.
+
+  rDirInfo: ["Characteristics are reserved, for future use.<br /><br />",
+  "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
+  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",,,
+  "Number of files, or folders with names.<br /><br />Named entires, and numeral named ID are added together for array size.",
+  "Number of files, or folders with numerical names.<br /><br />Named entires, and numeral named ID are added together for array size.",
+  "Array consisting of folder or file elements.",
+  "File, or Folder array element.",
+  "If the value is positive. The number value is the name.<br /><br />" +
+  "If the value is negative. Flip the number from negative to positive. Subtract the value into 2147483648. This removes the sing.<br /><br />" +
+  "The location is added to the start of the resource section. The string at that location is then the name, of the folder, or file.",
+  "If the value is positive. It is a location to a file.<br /><br />" +
+  "If the value is negative. Flip the number from negative to positive. Subtract the value into 2147483648. This removes the sing.<br /><br />" +
+  "The location is added to the start of the resource section. The location locates to anther Directory of files, or folders."],
+
+  //Resource directory section file elements info.
+
+  rFileInfo: ["The location to the file. This location is added to the base address of the program.","The size of the file.",""],
+  
+  //Resource directory section string element info.
+
+  rStrInfo: ["The character length of the string. Each character is 16 bits.","The name of the folder, or file."],
+
   //MZ header information.
 
   mzHeader: function(i)
@@ -1098,50 +1142,70 @@ format = {
 
   secArray: function(i)
   {
-    i-=1; if( i < 0 ) { this.r1.length(12); info.innerHTML = "Number of sections to read was defined in the PE header.<br /><br />" +
+    if( i < 1 ) { this.r1.length(12); info.innerHTML = "Number of sections to read was defined in the PE header.<br /><br />" +
     "This array tells us where to read the file and where to place a section of the file in RAM memory.<br /><br />" +
     "The \"Data Directory Array\" uses virtual addresses to tell the loader where the various section or data are in the application.<br /><br />" +
     "The virtual addresses" + format.addressInfo; return; }
   
-    info.innerHTML = format.secInfo[i%8];
+    info.innerHTML = format.secInfo[(i - 1) % 8];
   },
 
   //DLL import array info.
 
   dArrayInfo: function(i)
   {
-    if( i < 0 ) { info.innerHTML = "Methods that are imported from other files using the export table section.<br /><br />" +
+    if( i < 1 ) { info.innerHTML = "Methods that are imported from other files using the export table section.<br /><br />" +
     "Each import file is loaded to RAM memory. Each import has two method lists.<br /><br />" +
     "The first list is wrote over in RAM with the location to each export method location.<br /><br />" +
     "This allows the binary to directly run methods without rewriting, or changing machine code.<br /><br />" +
     "It is easy to map when a method call is done in machine code."; return; }
 
-    info.innerHTML = format.msg[0];
+    info.innerHTML = format.dllAInfo[(i - 1) % 6];
   },
-  
+
+  //DLL name info.
+
+  dNInfo: function() { info.innerHTML = "The DLL name location. The end of each name ends with code 00 hex.<br /><br />Each DLL Array element contains a DLL Name location, and tow method list locations."; },
+
+  //DLL function list info.
+
+  dFInfo: function() { info.innerHTML = "Locations to each method name, or by address list index.<br /><br />" +
+  "If the location is positive, it then locates to a method name.<br /><br />However, if the location is negative, then the sing is removed.<br /><br />It then imports by address list index.<br /><br />" +
+  "The export section has a name list, and address list.<br /><br />Each name specifies which index in the address list.<br /><br />" +
+  "This means we can lookup a name, for which address in the address list, or directly use it's address list number.<br /><br />" +
+  "The first location that is 0 is the end of the list.<br /><br />Each DLL Array element contains a DLL Name location, and tow method list locations.<br /><br />" +
+  "The tow method lists should locate to the same method names, or indexes.<br /><br />If they do not match then there might be something wrong with the import table."; },
+
+  //DLL function name info.
+
+  dFNInfo: function() { info.innerHTML = "Each method name location contains a address list index, and then its name.<br /><br />The end of each method name ends with code 00 hex.<br /><br />" +
+  "The index is which address should be the method location in the export address list.<br /><br />This speeds up finding methods."; },
+
   //Resource directory information.
 
   rDInfo: function(i, pos)
   {
-    if( i < 0 ) { format.rArray.length((file.data[pos+12]|(file.data[pos+13]<<8))+(file.data[pos+14]|(file.data[pos+15]<<8))); }
+    if( i < 0 ) { format.rArray.length((file.data[pos+12]|(file.data[pos+13]<<8))+(file.data[pos+14]|(file.data[pos+15]<<8))); info.innerHTML = "A directory consisting, of characteristics, time date stamp, and number of files, or folders."; return; }
     
-    info.innerHTML = format.msg[0];
+    info.innerHTML = format.rDirInfo[i > 7 ? ( ( i - 7 ) % 3 ) + 7 : i];
   },
 
   //Resource directory file information.
 
   rFInfo: function(i)
   {
-    info.innerHTML = format.msg[0];
+    if( i < 0 ) { info.innerHTML = "Each file location. Has a location to the actual data, size, and code page."; return; }
+
+    info.innerHTML = format.rFileInfo[i];
   },
     
   //Resource entire name.
 
   rNInfo: function(i, pos)
   {
-    if( i < 0 ) { format.rLen.length((file.data[pos]<<1)|(file.data[pos+1]<<9)); }
+    if( i < 0 ) { format.rLen.length((file.data[pos]<<1)|(file.data[pos+1]<<9)); info.innerHTML = "Location to the named Folder, or File."; return; }
     
-    info.innerHTML = format.msg[0];
+    info.innerHTML = format.rStrInfo[i];
   },
 
   //The main export entire that locates to the address-list and name-list/ordinal-list.

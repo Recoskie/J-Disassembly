@@ -1162,10 +1162,11 @@ format = {
   dArrayInfo: function(i)
   {
     if( i < 1 ) { info.innerHTML = "Methods that are imported from other files using the export table section.<br /><br />" +
-    "Each import file is loaded to RAM memory. Each import has two method lists.<br /><br />" +
-    "The first list is wrote over in RAM with the location to each export method location.<br /><br />" +
-    "This allows the binary to directly run methods without rewriting, or changing machine code.<br /><br />" +
-    "It is easy to map when a method call is done in machine code."; return; }
+    "Each import file is loaded to RAM. Each import array element also has two method lists.<br /><br />" +
+    "Both method lists locate the same method names and can be used to check if the import table is corrupted if both are not the same.<br /><br />" +
+    "The first list locations are replaced with the export method address location from the other binaries export address list.<br /><br />" +
+    "The programs machine code uses the first list locations as the location to call or jump to another binary method or function.<br /><br />" +
+    "Mapping a method call in machine code is a straightforward process, designed to be easily understood and implemented."; return; }
 
     info.innerHTML = format.dllAInfo[(i - 1) % 6];
   },

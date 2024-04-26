@@ -228,22 +228,33 @@ format = {
 
         //Scan the data directory array.
 
-        var types = ["function Export Table.h", "DLL Import Table.h", "Resource Files.h", "Exception Table.h", "Security Level Settings.h",
-        "Relocations.h", "DEBUG TABLE.h", "Description/Architecture.h", "Machine Value.h", "Thread Storage Location.h", "Load System Configuration.h",
-        "Import Table of Functions inside program.h", "Import Address Setup Table.h", "Delayed Import Table.h", "COM Runtime Descriptor.h"];
+        var types = ["function Export Table", "DLL Import Table", "Resource Files", "Exception Table", "Security Level Settings",
+        "Relocations", "DEBUG TABLE", "Description/Architecture", "Machine Value", "Thread Storage Location", "Load System Configuration",
+        "Import Table of Functions inside program", "Import Address Setup Table", "Delayed Import Table", "COM Runtime Descriptor"];
+        this.readSec =
+        [
+          this.readExport,this.readDLL,this.readRes,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,
+          this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader
+        ];
         
         for(var e = pe + (ddrSize << 3), i = 0, size = 0, loc = 0; pe < e; pe += 8, i++)
         {
           loc = file.tempD[pe]|(file.tempD[pe+1]<<8)|(file.tempD[pe+2]<<16)|(file.tempD[pe+3]<<24);
           size = file.tempD[pe+4]|(file.tempD[pe+5]<<8)|(file.tempD[pe+6]<<16)|(file.tempD[pe+7]<<24);
-          if( size > 0 ) { root.add(types[i],[-(i+1),loc + this.baseAddress,size]); }
+          if( size > 0 )
+          {
+            if(this.readSec[i].name == "noReader")
+            {
+              root.add(types[i]+".h",[-(i+1),loc + this.baseAddress,size]);
+            }
+            else
+            {
+              var t = new treeNode(types[i],[-(i+1),loc + this.baseAddress,size]); t.add(""); root.add(t);
+            }
+          }
         }
         
-        types = undefined; this.readSec =
-        [
-          this.readExport,this.readDLL,this.readRes,this.noReader,this.noReader,this.readReloc,this.noReader,this.noReader,
-          this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader,this.noReader
-        ];
+        this.readSec[5] = this.readReloc; types = undefined;
 
         //Application section map to virtual address space structure.
 
@@ -300,7 +311,8 @@ format = {
     this.exportInfo[0]=this.exportInfo[0]+this.res;this.exportInfo[2]=this.ver;this.exportInfo[3]=this.ver;
     this.dllAInfo[1]=this.dListInfo;this.dllAInfo[5]=this.dListInfo;
     this.rDirInfo[0]=this.rDirInfo[0]+this.res;this.rDirInfo[2]=this.ver;this.rDirInfo[3]=this.ver;
-    this.rFileInfo[3] = this.res;
+    this.rFileInfo[3]=this.res;
+    this.peInfo[3]=this.peInfo[3]+this.timeStamp;this.exportInfo[1]=this.timeStamp;this.dllAInfo[2]=this.timeStamp;this.rDirInfo[1]=this.timeStamp;
 
     //Show virtual address space.
 
@@ -785,6 +797,9 @@ format = {
   "The first list locations are replaced with the export method address location from the other binaries export address list.<br /><br />" +
   "The programs machine code uses the first list locations as the location to call or jump to another binary method or function.",
 
+  timeStamp: "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
+  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",
+
   //MZ header data elements info.
 
   mzInfo:["The signature must always be 4D 5A = MZ.<br /><br />" + 
@@ -843,9 +858,7 @@ format = {
   "There is also windows RT. Which RT is a ARM core compilation of windows. In which case you might see Machine ARM.",
   "This is the number of sections to read after the OP header. In the \"Mapped SECTIONS TO RAM\".<br /><br />" +
   "The sections specify a position to read the file, and virtual address to place the section, from the windows binary in RAM.",
-  "The Date this binary was created.<br /><br />The date time stamp is in seconds. The seconds are added to the starting date \"00:00 January 1, 1970\".<br /><br />" +
-  "If the time date stamp is \"37\" in value, then it is plus 37 second giving \"00:37 January 1, 1970\".<br /><br />" +
-  "The time date stamp is defined in UTC time, so it may be a day different in time, or few hours different depending on your time zone.",
+  "The Date this binary was created.<br /><br />",
   "The file offset of the symbol table, or zero if no symbol table is present.<br /><br />",
   "The number of entries in the symbol table.<br /><br />This data can be used to locate the string table, which immediately follows the symbol table.<br /><br />",
   "The size of the optional header. Which is read after the PE header.",
@@ -1019,9 +1032,7 @@ format = {
 
   //Export section data elements info.
 
-  exportInfo: ["Characteristics are reserved, for future use.<br /><br />",
-  "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
-  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",,,
+  exportInfo: ["Characteristics are reserved, for future use.<br /><br />",,,,
   "Location to the export file name.<br /><br />Should be the name of the binary file.",
   "Base is usually set one = zero.<br /><br />If base is 3, then it is 2 in value.<br /><br />" +
   "Base is added to the address list. It allows us to skip addresses at the start of the address list.",
@@ -1037,18 +1048,14 @@ format = {
 
   dllAInfo: ["Array elements consisting of A DLL name location, and tow List locations.<br /><br />" + 
   "Two lists are used, for which methods to import from the DLL.<br /><br />The lists should match. If they do not, then the import table is corrupted.<br /><br />" +
-  "The first Element that has no locations, and is all zeros is the end of the DLL import table.",,
-  "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
-  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",
+  "The first Element that has no locations, and is all zeros is the end of the DLL import table.",,,
   "Forward Chain is a list of methods that must be loaded from the DLL file before the import methods may be usable.<br /><br />" +
   "This is only if the method we want to use depends on other methods. This is all zeros if not used.",
   "The location of the DLL name to start importing methods from it's export table."],
 
   //Resource directory section elements info.
 
-  rDirInfo: ["Characteristics are reserved, for future use.<br /><br />",
-  "A date time stamp is in seconds. The seconds are added to the starting date \"Wed Dec 31 7:00:00PM 1969\".<br /><br />" +
-  "If the time date stamp is \"37\" in value, then it is plus 37 seconds giving \"Wed Dec 31 7:00:37PM 1969\".",,,
+  rDirInfo: ["Characteristics are reserved, for future use.<br /><br />",,,,
   "Number of files, or folders with names.<br /><br />Named entires, and numeral named ID are added together for array size.",
   "Number of files, or folders with numerical names.<br /><br />Named entires, and numeral named ID are added together for array size.",
   "Array consisting of folder or file elements.",

@@ -331,7 +331,7 @@ format = {
   Scan DLL import table.
   -------------------------------------------------------------------------------------------------------------------------*/
 
-  fnPos: [], fnName: [], readDLL: function(vPos, len)
+  fnMap: undefined, readDLL: function(vPos, len)
   {
     if(len) //Initialize data. Note the len is useless as it only covers part of the import table data so we use the "lengthV" method to give us the full import segment size.
     {
@@ -389,9 +389,9 @@ format = {
       {
         //Read DLL name.
 
-        str = ""; z = -1; i = (nLoc + format.baseAddress) - vPos; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
+        str = ""; z = -1; i = (nLoc + format.baseAddress) - vPos; while((z = file.tempD[i++]) != 0) { str += String.fromCharCode(z); }
 
-        dll = new treeNode(str.substring(0,str.length-1),[28,nLoc + format.baseAddress, str.length]); n.add(dll);
+        dll = new treeNode(str.substring(0,str.length),[28,nLoc + format.baseAddress, str.length+1]); n.add(dll);
 
         //Add function list nodes.
 
@@ -408,13 +408,15 @@ format = {
 
           if(nLoc != 0 && nLoc > 0)
           {
-            nLoc += format.baseAddress; str = ""; z = -1; i = (nLoc - vPos) + 2; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
+            nLoc += format.baseAddress; str = ""; z = -1; i = (nLoc - vPos) + 2; while((z = file.tempD[i++]) != 0) { str += String.fromCharCode(z); }
 
-            dll.add(str+"().dll",[36,nLoc, str.length]);
+            dll.add(str+"().dll",[36,nLoc, str.length+1]);
             
-            //Function list 2 is used by the machine code section to call a an linked location from an export list.
+            //Function list 2 is used by the machine code section to call an linked location from an export list.
             
-            format.fnPos.push(fnEl + fn2); format.fnPos.push((fnEl += fnElSize) + fn2); format.fnName.push(str);
+            str = "<a href='https://www.google.com/search?q="+str+"' target='_blank'>" + str + "()</a>";
+            
+            core.add(fnEl + fn2, fnElSize, str); fnEl += fnElSize;
           }
 
           pos2 += fnElSize;
@@ -430,7 +432,11 @@ format = {
 
     format.dArray.length(pos1>>4|pos1>>2); //Fast bitwise divide by 20.
 
-    format.scanNode = false; file.tempD = []; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); } format.fnScan = true;
+    format.fnMap = core.get(); console.log(format.fnMap);
+
+    format.scanNode = false; file.tempD = []; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); }
+    
+    format.fnScan = true;
   },
 
   /*-------------------------------------------------------------------------------------------------------------------------
@@ -553,11 +559,11 @@ format = {
 
     //Get the export name.
 
-    var str = "", z = -1, i = format.des[17].offset - vPos, e = 0; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
+    var str = "", z = -1, i = format.des[17].offset - vPos, e = 0; while((z = file.tempD[i++]) != 0) { str += String.fromCharCode(z); }
 
     //Add export lists to the export name node.
 
-    format.eStr.length(str.length); str=str.substring(0,str.length-1); var t1 = new treeNode(str,68), t2 = null; n.add(t1); t1.add("Address list location.h",56); t1.add("Name list location.h",60); t1.add("Order list location.h",64);
+    format.eStr.length(str.length+1); var t1 = new treeNode(str,68), t2 = null; n.add(t1); t1.add("Address list location.h",56); t1.add("Name list location.h",60); t1.add("Order list location.h",64);
 
     //Entires that are named are set true in mList so that we can skip them when adding the un-named entires.
 
@@ -573,11 +579,11 @@ format = {
 
       //Get method name.
 
-      str = ""; z = -1; i = file.tempD[i1]|file.tempD[i1+1]<<8|file.tempD[i1+2]<<16|file.tempD[i1+3]<<24; i = (i + format.baseAddress) - vPos; while(z != 0) { str += String.fromCharCode(z = file.tempD[i++]); }
+      str = ""; z = -1; i = file.tempD[i1]|file.tempD[i1+1]<<8|file.tempD[i1+2]<<16|file.tempD[i1+3]<<24; i = (i + format.baseAddress) - vPos; while((z = file.tempD[i++]) != 0) { str += String.fromCharCode(z); }
 
       //Parse export name data into node.
 
-      t2 = new treeNode(str+"() #"+ordinal,[72,(i-str.length)+vPos,str.length]);
+      t2 = new treeNode(str+"() #"+ordinal,[72,(i-str.length)+vPos,str.length+1]);
 
       //Get the address location of ordinal in address list.
       
@@ -1281,13 +1287,13 @@ format = {
 
     if(!format.fnScan){format.fnScan=true;for(var e=Tree.getNode(0),s=null,i=0;i<e.length();i++){if((s=e.getNode(i)).getArgs()[0]==-2){format.open(s);return;}}}
 
-    core.showInstructionHex = false;
+    core.showInstructionHex = false; core.addressMap = true;
 
-    core.scanReset(); core.addressMap = true; core.resetMap(); core.bitMode = format.is64bit ? 2 : 1;
+    core.scanReset(); core.resetMap(); core.bitMode = format.is64bit ? 2 : 1;
 
     //Set function call address list and data to core.
 
-    core.set(format.fnPos,format.fnName); dModel.setCore(core); dModel.coreDisLoc(format.disV,true);
+    core.set(format.fnMap); dModel.setCore(core); dModel.coreDisLoc(format.disV,true);
   },
 
   //MSDos code scanner. Ensures proper disassembly of old 16 ms dos applications.

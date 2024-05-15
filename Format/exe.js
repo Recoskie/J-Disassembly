@@ -379,7 +379,7 @@ format = {
 
     //Scan The DLL Array.
 
-    var pos1 = 0, pos2 = 0, fn1 = -1, fn2 = -1, nLoc = -1, fnEl = 0, fnElSize = !format.is64bit ? 4 : 8, str = "", z = -1, i = 0, dll = null, fnL1 = null, fnL2 = null; while((fn1|fn2) != 0)
+    var pos1 = 0, pos2 = 0, fn1 = -1, fn2 = -1, nLoc = -1, fnEl = 0, fnElSize = !format.is64bit ? 4 : 8, list = [], str = "", z = -1, i = 0, dll = null, fnL1 = null, fnL2 = null; while((fn1|fn2) != 0)
     {
       fn1 = (file.tempD[pos1]|file.tempD[pos1+1]<<8|file.tempD[pos1+2]<<16|file.tempD[pos1+3]<<24);
       nLoc = (file.tempD[pos1+12]|file.tempD[pos1+13]<<8|file.tempD[pos1+14]<<16|file.tempD[pos1+15]<<24);
@@ -399,7 +399,7 @@ format = {
 
         //Read function list1.
 
-        pos2 = fn1 - vPos; fnEl = 0; while(nLoc != 0)
+        pos2 = fn1 - vPos; while(nLoc != 0)
         {
           if(!format.is64bit) { nLoc=file.tempD[pos2]|(file.tempD[pos2+1]<<8)|(file.tempD[pos2+2]<<16)|(file.tempD[pos2+3]<<24); }
           else { nLoc=(file.tempD[pos2]|(file.tempD[pos2+1]<<8)|(file.tempD[pos2+2]<<16))+(file.tempD[pos2+3]*format.s24)+(file.tempD[pos+4]*format.s32)+(file.tempD[pos2+5]*format.s40)+(file.tempD[pos2+6]*format.s48)+(file.tempD[pos2+7]*format.s56); }
@@ -414,25 +414,23 @@ format = {
             
             //Function list 2 is used by the machine code section to call an linked location from an export list.
             
-            str = "<a href='https://www.google.com/search?q="+str+"' target='_blank'>" + str + "()</a>";
-            
-            core.add(fnEl + fn2, fnElSize, str); fnEl += fnElSize;
+            list.push("<a href='https://www.google.com/search?q=MSDN "+str+"' target='_blank'>" + str + "()</a>");
           }
 
           pos2 += fnElSize;
         }
 
-        //Set function list size to function list nodes.
+        //Set up function list.
 
-        fnEl += fnElSize; fnEl = !format.is64bit ? fnEl >> 2 : fnEl >> 3; fnL1.setArgs([32,fn1,fnEl]); fnL2.setArgs([32,fn2,fnEl]);
+        core.add(fn2, fnElSize, list); fnL1.setArgs([32,fn1,list.length+1]); fnL2.setArgs([32,fn2,list.length+1]); list = [];
       }
 
       pos1+=20;
     }
 
-    format.dArray.length(pos1>>4|pos1>>2); //Fast bitwise divide by 20.
+    format.dArray.length(pos1/20);
 
-    format.fnMap = core.get(); console.log(format.fnMap);
+    format.fnMap = core.get();
 
     format.scanNode = false; file.tempD = []; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); }
     

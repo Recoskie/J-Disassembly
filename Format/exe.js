@@ -428,9 +428,7 @@ format = {
       pos1+=20;
     }
 
-    format.dArray.length(pos1/20);
-
-    format.fnMap = core.get();
+    format.dArray.length(pos1/20); format.fnMap = core.get();
 
     format.scanNode = false; file.tempD = []; format.node.setNode(n); if(!format.fnScan) { dModel.setDescriptor(format.des[6]); } else { format.disEXE(); }
     

@@ -138,7 +138,7 @@
         if(layoutInit) { resize(); } else { initLayout(); }
       }
       
-      window.onresize = function() { if(pageW == document.documentElement.clientWidth && pageH == document.documentElement.clientHeight){ return; } pageW = document.documentElement.clientWidth; pageH = document.documentElement.clientHeight; re(); }
+      window.onresize = function() { if(pageW == swingIO.pageW() && pageH == swingIO.pageH()){ return; } pageW = swingIO.pageW(); pageH = swingIO.pageH(); re(); }
 
       //Layout checks.
 
@@ -315,7 +315,6 @@
 
         r.style.height = "calc(100% - "+t+"px)"; swingIO.scale(s<1?s**0.5:1);
 
-        mBar.style.minWidth = r.style.minWidth = Math.floor(pageW/s) + "px";
         r.style.minHeight = (Math.floor(pageH/s)-t) + "px";
       }
 
